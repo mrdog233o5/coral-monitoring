@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coral Reef Health Index Forecast · CoralWatch</title>
+<style>
+  :root {
+    --bg: #06181d;
+    --panel: rgba(255, 255, 255, 0.045);
+    --border: rgba(255, 255, 255, 0.10);
+    --text: #eaf6f4;
+    --muted: #8fb3b0;
+    --coral: #ff7a59;
+    --teal: #2dd4bf;
+    --amber: #ffd166;
+    --danger: #ff6b6b;
+    --good: #34d399;
+    --radius: 20px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { min-height: 100%; }
+
+  body {
+    margin: 0;
+    padding: 40px 24px 28px;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    background:
+      radial-gradient(1100px 620px at 12% -10%, rgba(45, 212, 191, 0.16), transparent 60%),
+      radial-gradient(900px 560px at 92% 4%, rgba(255, 122, 89, 0.14), transparent 62%),
+      radial-gradient(900px 700px at 50% 110%, rgba(45, 130, 180, 0.12), transparent 60%),
+      var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header {
+    width: 100%;
+    max-width: 1080px;
+    margin-bottom: 26px;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    color: var(--teal);
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .brand .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--coral);
+    box-shadow: 0 0 12px var(--coral);
+  }
+
+  h1 {
+    margin: 14px 0 10px;
+    font-size: clamp(28px, 4.2vw, 44px);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    background: linear-gradient(92deg, #ffffff 8%, #b7f4ea 52%, #ffb59f 96%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .sub {
+    margin: 0;
+    max-width: 720px;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  .sub strong { color: var(--text); font-weight: 600; }
+
+  main {
+    width: 100%;
+    max-width: 1080px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+    gap: 20px;
+    align-items: start;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .card-head h2 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: 0.01em; }
+
+  .tag {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--teal);
+    border: 1px solid rgba(45, 212, 191, 0.35);
+    background: rgba(45, 212, 191, 0.08);
+    border-radius: 999px;
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+
+  .tag.alt {
+    color: var(--coral);
+    border-color: rgba(255, 122, 89, 0.38);
+    background: rgba(255, 122, 89, 0.09);
+  }
+
+  /* ---------- sliders ---------- */
+
+  .sliders { display: flex; flex-direction: column; gap: 20px; }
+
+  .slider-row { display: flex; flex-direction: column; gap: 9px; }
+
+  .slider-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .slider-head label { display: flex; align-items: baseline; gap: 8px; cursor: pointer; }
+
+  .slider-name { font-size: 14.5px; font-weight: 600; }
+
+  .slider-en { font-size: 11.5px; color: var(--muted); letter-spacing: 0.01em; }
+
+  .slider-value {
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    color: #dffaf6;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px 9px;
+    min-width: 62px;
+    text-align: right;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 20px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    --p: 50%;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--teal), var(--coral)) 0 / var(--p) 100% no-repeat,
+                rgba(255, 255, 255, 0.12);
+  }
+
+  input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  input[type="range"]::-moz-range-progress {
+    height: 6px;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--teal), var(--coral));
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    margin-top: -6px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 3px solid var(--coral);
+    box-shadow: 0 0 0 4px rgba(255, 122, 89, 0.16), 0 4px 14px rgba(0, 0, 0, 0.45);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 3px solid var(--coral);
+    box-shadow: 0 0 0 4px rgba(255, 122, 89, 0.16), 0 4px 14px rgba(0, 0, 0, 0.45);
+  }
+
+  input[type="range"]:hover::-webkit-slider-thumb,
+  input[type="range"]:focus-visible::-webkit-slider-thumb {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 6px rgba(255, 122, 89, 0.20), 0 4px 14px rgba(0, 0, 0, 0.45);
+  }
+
+  input[type="range"]:focus-visible { outline: none; }
+
+  .slider-range {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: rgba(143, 179, 176, 0.75);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- presets ---------- */
+
+  .presets { margin-top: 24px; padding-top: 20px; border-top: 1px dashed var(--border); }
+
+  .presets-label {
+    display: block;
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 11px;
+  }
+
+  .preset-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .preset-btn {
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+  }
+
+  .preset-btn:hover {
+    background: rgba(45, 212, 191, 0.12);
+    border-color: rgba(45, 212, 191, 0.45);
+    transform: translateY(-1px);
+  }
+
+  .preset-btn:active { transform: translateY(0); }
+
+  /* ---------- result ---------- */
+
+  .result { position: sticky; top: 24px; }
+
+  .score-wrap { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 4px; }
+
+  .score {
+    font-size: clamp(64px, 9vw, 92px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(180deg, #ffffff, #bdf3e9);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    transition: opacity 0.18s ease;
+  }
+
+  .score.loading { opacity: 0.35; }
+
+  .score-unit { font-size: 22px; color: var(--muted); font-weight: 500; }
+
+  .category {
+    display: inline-block;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 5px 13px;
+    border-radius: 999px;
+    margin: 2px 0 20px;
+    border: 1px solid currentColor;
+    transition: color 0.2s ease, background 0.2s ease;
+  }
+
+  .gauge { position: relative; padding: 0 2px; }
+
+  .gauge-track {
+    height: 12px;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #ff6b6b 0%, #f6a15c 22%, #ffd166 46%, #9ede73 68%, #34d399 100%);
+    opacity: 0.92;
+  }
+
+  .gauge-marker {
+    position: absolute;
+    top: -5px;
+    left: 50%;
+    width: 3px;
+    height: 22px;
+    border-radius: 99px;
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.14), 0 0 18px rgba(255, 255, 255, 0.55);
+    transform: translateX(-50%);
+    transition: left 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .gauge-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    font-size: 11px;
+    color: rgba(143, 179, 176, 0.8);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .gauge-caption {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 5px;
+    font-size: 11px;
+    color: rgba(143, 179, 176, 0.6);
+  }
+
+  .delta {
+    margin: 22px 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    min-height: 22px;
+    transition: color 0.2s ease;
+  }
+
+  .delta.up { color: var(--good); }
+  .delta.down { color: var(--danger); }
+  .delta.flat { color: var(--muted); }
+
+  .note {
+    margin-top: 18px;
+    padding: 13px 15px;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--muted);
+  }
+
+  .model-meta {
+    margin-top: 14px;
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: rgba(143, 179, 176, 0.72);
+  }
+
+  .status { margin-top: 10px; font-size: 12px; color: var(--danger); min-height: 16px; }
+
+  footer {
+    width: 100%;
+    max-width: 1080px;
+    margin-top: 22px;
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: rgba(143, 179, 176, 0.55);
+  }
+
+  @media (max-width: 880px) {
+    body { padding: 26px 16px 22px; }
+    main { grid-template-columns: 1fr; }
+    .result { position: static; order: -1; }
+    .card { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="dot"></span>Coral Health Lab</div>
+    <h1>Coral Reef Health Index Forecast</h1>
+    <p class="sub">
+      Drag the sliders to set <strong>yesterday's</strong> daily-average reef sensor readings.
+      The model predicts <strong>today's</strong> CoralWatch health index (0–6, decimals
+      allowed). The index changes gradually: it mostly follows yesterday's value, and the
+      sensors nudge the direction of the daily change.
+    </p>
+  </header>
+
+  <main>
+    <section class="card controls">
+      <div class="card-head">
+        <h2>Yesterday's Observations</h2>
+        <span class="tag">Input X</span>
+      </div>
+      <div id="sliders" class="sliders"></div>
+      <div class="presets">
+        <span class="presets-label">Quick scenarios</span>
+        <div id="presets" class="preset-buttons"></div>
+      </div>
+    </section>
+
+    <section class="card result">
+      <div class="card-head">
+        <h2>Today's Prediction</h2>
+        <span class="tag alt">Output y</span>
+      </div>
+
+      <div class="score-wrap">
+        <div id="score" class="score loading">—</div>
+        <div class="score-unit">/ 6</div>
+      </div>
+      <div id="category" class="category">Loading model…</div>
+
+      <div class="gauge">
+        <div class="gauge-track"></div>
+        <div id="marker" class="gauge-marker" style="left: 50%"></div>
+        <div class="gauge-ticks">
+          <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+        </div>
+        <div class="gauge-caption"><span>Fully bleached</span><span>Very healthy</span></div>
+      </div>
+
+      <div id="delta" class="delta"></div>
+
+      <div class="note">
+        This demo uses an extended 0–6 coral colour-chart index (0 = fully bleached / dead,
+        6 = very healthy); the average over a whole transect is a decimal. The index has
+        <strong>inertia</strong>: it only moves a limited step per day and recovery is slower
+        than decline, so the prediction usually stays close to yesterday's value. The model
+        takes <strong>yesterday's</strong> five sensor averages plus that day's health index and
+        predicts <strong>today's</strong> health index; the sensors mainly nudge the direction
+        and size of the daily change.
+      </div>
+
+      <div id="model-meta" class="model-meta"></div>
+      <div id="status" class="status"></div>
+    </section>
+  </main>
+
+  <footer>
+    Demo model: trained on synthetic data, for exploration and demonstration only
+    — not a scientific conclusion about real reefs.
+  </footer>
+
+<script>
+(() => {
+  "use strict";
+
+  const state = {
+    features: [],
+    requestId: 0,
+    timer: null,
+  };
+
+  const els = {
+    sliders: document.getElementById("sliders"),
+    presets: document.getElementById("presets"),
+    score: document.getElementById("score"),
+    category: document.getElementById("category"),
+    marker: document.getElementById("marker"),
+    delta: document.getElementById("delta"),
+    modelMeta: document.getElementById("model-meta"),
+    status: document.getElementById("status"),
+  };
+
+  const PRESETS = [
+    {
+      name: "Healthy reef",
+      values: {
+        prev_dissolved_oxygen_mg_l: 8.2,
+        prev_ph: 8.20,
+        prev_temperature_c: 25.8,
+        prev_zooxanthellae_million_cells_cm2: 3.5,
+        prev_nitrate_umol_l: 0.3,
+        prev_coral_health_index: 5.5,
+      },
+    },
+    {
+      name: "Moderate stress",
+      values: {
+        prev_dissolved_oxygen_mg_l: 5.8,
+        prev_ph: 7.95,
+        prev_temperature_c: 28.6,
+        prev_zooxanthellae_million_cells_cm2: 2.0,
+        prev_nitrate_umol_l: 3.7,
+        prev_coral_health_index: 3.0,
+      },
+    },
+    {
+      name: "Marine heatwave",
+      values: {
+        prev_dissolved_oxygen_mg_l: 4.3,
+        prev_ph: 7.78,
+        prev_temperature_c: 31.2,
+        prev_zooxanthellae_million_cells_cm2: 1.0,
+        prev_nitrate_umol_l: 6.5,
+        prev_coral_health_index: 1.2,
+      },
+    },
+    {
+      name: "Nutrient pollution",
+      values: {
+        prev_dissolved_oxygen_mg_l: 5.0,
+        prev_ph: 7.85,
+        prev_temperature_c: 29.2,
+        prev_zooxanthellae_million_cells_cm2: 1.4,
+        prev_nitrate_umol_l: 7.4,
+        prev_coral_health_index: 2.0,
+      },
+    },
+    {
+      name: "Severe bleaching",
+      values: {
+        prev_dissolved_oxygen_mg_l: 3.6,
+        prev_ph: 7.72,
+        prev_temperature_c: 31.6,
+        prev_zooxanthellae_million_cells_cm2: 0.5,
+        prev_nitrate_umol_l: 7.0,
+        prev_coral_health_index: 0.6,
+      },
+    },
+  ];
+
+  function fmt(value, decimals) {
+    return Number(value).toFixed(decimals);
+  }
+
+  function clamp(value, low, high) {
+    return Math.min(high, Math.max(low, value));
+  }
+
+  function featureByKey(key) {
+    return state.features.find((feature) => feature.key === key);
+  }
+
+  function buildSliders(features) {
+    state.features = features;
+    els.sliders.innerHTML = "";
+
+    for (const feature of features) {
+      const row = document.createElement("div");
+      row.className = "slider-row";
+
+      const head = document.createElement("div");
+      head.className = "slider-head";
+
+      const label = document.createElement("label");
+      label.setAttribute("for", `input-${feature.key}`);
+      const detail = feature.unit || "";
+      label.innerHTML =
+        `<span class="slider-name">${feature.label}</span>` +
+        (detail ? `<span class="slider-en">${detail}</span>` : "");
+
+      const value = document.createElement("span");
+      value.className = "slider-value";
+      value.id = `value-${feature.key}`;
+
+      head.append(label, value);
+
+      const input = document.createElement("input");
+      input.type = "range";
+      input.id = `input-${feature.key}`;
+      input.min = String(feature.min);
+      input.max = String(feature.max);
+      input.step = String(feature.step);
+      input.value = String(feature.default);
+      input.setAttribute("aria-label", feature.label);
+
+      const range = document.createElement("div");
+      range.className = "slider-range";
+      range.innerHTML =
+        `<span>${fmt(feature.min, feature.decimals)}</span>` +
+        `<span>${feature.unit || ""}</span>` +
+        `<span>${fmt(feature.max, feature.decimals)}</span>`;
+
+      row.append(head, input, range);
+      els.sliders.append(row);
+
+      paintSlider(feature);
+      input.addEventListener("input", () => {
+        paintSlider(feature);
+        schedulePredict();
+      });
+    }
+  }
+
+  function paintSlider(feature) {
+    const input = document.getElementById(`input-${feature.key}`);
+    const value = document.getElementById(`value-${feature.key}`);
+    if (!input || !value) return;
+    const ratio = (Number(input.value) - feature.min) / (feature.max - feature.min);
+    input.style.setProperty("--p", `${(clamp(ratio, 0, 1) * 100).toFixed(2)}%`);
+    value.textContent = fmt(input.value, feature.decimals);
+  }
+
+  function setValues(values) {
+    for (const feature of state.features) {
+      if (!(feature.key in values)) continue;
+      const input = document.getElementById(`input-${feature.key}`);
+      const next = clamp(Number(values[feature.key]), feature.min, feature.max);
+      input.value = String(next);
+      paintSlider(feature);
+    }
+    schedulePredict();
+  }
+
+  function buildPresets() {
+    els.presets.innerHTML = "";
+    for (const preset of PRESETS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "preset-btn";
+      button.textContent = preset.name;
+      button.addEventListener("click", () => setValues(preset.values));
+      els.presets.append(button);
+    }
+  }
+
+  function currentPayload() {
+    const payload = {};
+    for (const feature of state.features) {
+      const input = document.getElementById(`input-${feature.key}`);
+      payload[feature.key] = Number(input.value);
+    }
+    return payload;
+  }
+
+  function schedulePredict() {
+    window.clearTimeout(state.timer);
+    state.timer = window.setTimeout(predict, 90);
+  }
+
+  async function predict() {
+    if (!state.features.length) return;
+    const requestId = ++state.requestId;
+    els.score.classList.add("loading");
+
+    try {
+      const response = await fetch("/api/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentPayload()),
+      });
+      if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try {
+          const body = await response.json();
+          if (body && body.error) detail = body.error;
+        } catch (_) { /* ignore */ }
+        throw new Error(detail);
+      }
+      const data = await response.json();
+      if (requestId !== state.requestId) return;
+      renderResult(data);
+      els.status.textContent = "";
+    } catch (error) {
+      if (requestId !== state.requestId) return;
+      els.score.classList.remove("loading");
+      els.status.textContent = `Prediction failed: ${error.message}. Make sure server/app.py is running.`;
+    }
+  }
+
+  function categoryFor(value) {
+    if (value < 0.8) return { text: "Severely bleached", color: "#ff6b6b" };
+    if (value < 1.8) return { text: "Bleaching risk", color: "#ff8a5c" };
+    if (value < 2.8) return { text: "Stressed", color: "#f6b756" };
+    if (value < 4.0) return { text: "Fair", color: "#ffd166" };
+    if (value < 5.0) return { text: "Healthy", color: "#7ed957" };
+    return { text: "Very healthy", color: "#34d399" };
+  }
+
+  function renderResult(data) {
+    const prediction = Number(data.prediction);
+    const change = Number(data.change);
+    const min = Number(data.scale?.min ?? 1);
+    const max = Number(data.scale?.max ?? 6);
+    const category = categoryFor(prediction);
+
+    els.score.textContent = prediction.toFixed(2);
+    els.score.classList.remove("loading");
+
+    els.category.textContent = category.text;
+    els.category.style.color = category.color;
+    els.category.style.background = `${category.color}1f`;
+    els.category.style.borderColor = `${category.color}66`;
+
+    const ratio = clamp((prediction - min) / (max - min), 0, 1);
+    els.marker.style.left = `${(ratio * 100).toFixed(2)}%`;
+
+    const direction = Math.abs(change) < 0.005 ? "flat" : change > 0 ? "up" : "down";
+    const arrow = direction === "up" ? "↑" : direction === "down" ? "↓" : "→";
+    const sign = change > 0 ? "+" : "";
+    els.delta.className = `delta ${direction}`;
+    els.delta.textContent = `vs. yesterday ${sign}${change.toFixed(2)} ${arrow}`;
+  }
+
+  function renderModelMeta(model) {
+    const parts = ["LightGBM", `${model.num_trees} trees`];
+    const metrics = model.metrics;
+    if (metrics && typeof metrics.mae === "number") {
+      parts.push(`training MAE ${metrics.mae.toFixed(3)}`);
+      parts.push(`R² ${metrics.r2.toFixed(3)}`);
+      parts.push(`${metrics.rows} samples`);
+    }
+    els.modelMeta.textContent = `Model: ${parts.join(" · ")}`;
+  }
+
+  async function init() {
+    buildPresets();
+    try {
+      const response = await fetch("/api/meta");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const meta = await response.json();
+      buildSliders(meta.features);
+      renderModelMeta(meta.model);
+      els.category.textContent = "Waiting for prediction…";
+      await predict();
+    } catch (error) {
+      els.score.classList.remove("loading");
+      els.score.textContent = "—";
+      els.category.textContent = "Could not load model";
+      els.status.textContent = `Could not reach the prediction service: ${error.message}. Run .venv/bin/python server/app.py`;
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
