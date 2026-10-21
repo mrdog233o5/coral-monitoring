@@ -1,0 +1,1614 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Coral Health Loop · Closed-Loop Demo</title>
+<style>
+  :root {
+    --bg: #05171c;
+    --panel: rgba(255, 255, 255, 0.045);
+    --panel-strong: rgba(255, 255, 255, 0.065);
+    --border: rgba(255, 255, 255, 0.10);
+    --border-strong: rgba(255, 255, 255, 0.18);
+    --text: #eaf6f4;
+    --muted: #8fb3b0;
+    --muted-dim: rgba(143, 179, 176, 0.62);
+    --coral: #ff7a59;
+    --teal: #2dd4bf;
+    --amber: #ffd166;
+    --danger: #ff6b6b;
+    --good: #34d399;
+    --radius: 20px;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { min-height: 100%; }
+
+  body {
+    margin: 0;
+    padding: 32px 24px 30px;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    background:
+      radial-gradient(1100px 620px at 10% -12%, rgba(45, 212, 191, 0.16), transparent 60%),
+      radial-gradient(900px 560px at 94% 2%, rgba(255, 122, 89, 0.13), transparent 62%),
+      radial-gradient(1000px 720px at 50% 112%, rgba(45, 130, 180, 0.13), transparent 62%),
+      var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .shell { width: 100%; max-width: 1280px; }
+
+  /* ---------------- header ---------------- */
+
+  header { margin-bottom: 20px; }
+
+  .brand-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    color: var(--teal);
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .brand .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--coral);
+    box-shadow: 0 0 12px var(--coral);
+  }
+
+  .version-tag {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--amber);
+    border: 1px solid rgba(255, 209, 102, 0.35);
+    background: rgba(255, 209, 102, 0.08);
+    border-radius: 999px;
+    padding: 5px 12px;
+    white-space: nowrap;
+  }
+
+  h1 {
+    margin: 13px 0 9px;
+    font-size: clamp(27px, 3.6vw, 40px);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    background: linear-gradient(92deg, #ffffff 8%, #b7f4ea 52%, #ffb59f 96%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .sub {
+    margin: 0;
+    max-width: 860px;
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.72;
+  }
+
+  .sub strong { color: var(--text); font-weight: 600; }
+  .sub .kalman { color: var(--amber); font-weight: 600; }
+
+  /* ---------------- status bar ---------------- */
+
+  .statusbar {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 11px 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .live-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--good);
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.9);
+    animation: breathe 1.6s ease-in-out infinite;
+    flex: none;
+  }
+
+  .live-dot.paused {
+    background: var(--muted);
+    box-shadow: none;
+    animation: none;
+  }
+
+  @keyframes breathe {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(0.78); }
+  }
+
+  #loop-status { font-size: 13px; font-weight: 650; }
+
+  .statusbar .sep { color: var(--muted-dim); }
+
+  .statusbar .meta {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .controls {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  button, select {
+    font: inherit;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid var(--border-strong);
+    border-radius: 9px;
+    padding: 7px 13px;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  }
+
+  button:hover, select:hover { background: rgba(45, 212, 191, 0.12); border-color: rgba(45, 212, 191, 0.45); }
+  button:active { transform: translateY(1px); }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid rgba(45, 212, 191, 0.8); outline-offset: 2px; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  select { padding-right: 9px; }
+  select option { background: #0b2429; color: var(--text); }
+
+  /* ---------------- cards / grid ---------------- */
+
+  main {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.42fr) minmax(320px, 1fr);
+    gap: 18px;
+    align-items: stretch;
+  }
+
+  .col { display: flex; flex-direction: column; gap: 18px; min-width: 0; height: 100%; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.26);
+    min-width: 0;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+
+  .card-head h2 {
+    margin: 0;
+    font-size: 15.5px;
+    font-weight: 650;
+    letter-spacing: 0.01em;
+  }
+
+  .tag {
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--teal);
+    border: 1px solid rgba(45, 212, 191, 0.35);
+    background: rgba(45, 212, 191, 0.08);
+    border-radius: 999px;
+    padding: 4px 10px;
+    white-space: nowrap;
+  }
+
+  .tag.amber { color: var(--amber); border-color: rgba(255, 209, 102, 0.4); background: rgba(255, 209, 102, 0.08); }
+  .tag.coral { color: var(--coral); border-color: rgba(255, 122, 89, 0.4); background: rgba(255, 122, 89, 0.08); }
+
+  /* ---------------- chart ---------------- */
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+
+  .swatch { width: 16px; height: 3px; border-radius: 99px; display: inline-block; }
+  .swatch.state { background: var(--teal); box-shadow: 0 0 8px rgba(45, 212, 191, 0.7); }
+  .swatch.truth { background: var(--coral); opacity: 0.75; }
+  .swatch.correction { width: 9px; height: 9px; border-radius: 2px; background: #ffffff; transform: rotate(45deg); }
+
+  .chart-wrap { position: relative; width: 100%; }
+
+  #chart { display: block; width: 100%; height: 330px; }
+
+  .chart-foot {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted-dim);
+    flex-wrap: wrap;
+  }
+
+  /* ---------------- pipeline ---------------- */
+
+  .pipeline-card { padding-top: 18px; margin-top: 18px; }
+
+  .pipeline-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; }
+
+  .scroll-hint { display: none; }
+
+  #pipeline { display: block; width: 100%; height: auto; min-width: 0; }
+
+  #pipeline text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+  .pipeline-box {
+    fill: rgba(255, 255, 255, 0.025);
+    stroke: rgba(255, 255, 255, 0.34);
+    stroke-width: 1.4;
+    transition: fill 0.3s ease, stroke 0.3s ease;
+  }
+
+  .pipeline-box.dashed { stroke-dasharray: 4 4; stroke: rgba(255, 255, 255, 0.22); }
+
+  .stage-active .pipeline-box,
+  .pipeline-box.stage-active {
+    fill: rgba(45, 212, 191, 0.10);
+    stroke: var(--teal);
+    filter: url(#glow-teal);
+  }
+
+  .pipeline-box.correction-active {
+    fill: rgba(255, 122, 89, 0.12);
+    stroke: var(--coral);
+    filter: url(#glow-coral);
+  }
+
+  .pipeline-label {
+    fill: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .pipeline-title { fill: var(--text); font-size: 13.5px; font-weight: 600; }
+  .pipeline-small { fill: var(--muted); font-size: 11.5px; }
+  .pipeline-value { fill: var(--teal); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pipeline-big { fill: #ffffff; font-size: 25px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pipeline-sensor { fill: var(--text); font-size: 12.5px; }
+  .pipeline-reading { fill: var(--teal); font-size: 12.5px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .loop-arrow { stroke: rgba(255, 255, 255, 0.38); stroke-width: 1.4; fill: none; }
+  .loop-arrow.hot { stroke: var(--teal); filter: url(#glow-teal); }
+
+  .flow-dot {
+    fill: var(--teal);
+    filter: url(#glow-teal);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+
+  .flow-dot.on { opacity: 1; animation: dotpulse 0.6s ease-out; }
+
+  @keyframes dotpulse {
+    0% { r: 3; opacity: 1; }
+    100% { r: 8; opacity: 0; }
+  }
+
+  /* ---------------- sensors ---------------- */
+
+  .sensor-list { display: flex; flex-direction: column; gap: 13px; }
+
+  .sensor-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 96px; gap: 14px; align-items: center; }
+
+  .sensor-name { font-size: 13px; font-weight: 600; }
+  .sensor-unit { display: block; font-size: 10.5px; color: var(--muted-dim); font-weight: 400; margin-top: 2px; }
+
+  .sensor-bar { height: 6px; border-radius: 99px; background: rgba(255, 255, 255, 0.09); overflow: hidden; }
+
+  .sensor-bar > i {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: 99px;
+    background: linear-gradient(90deg, rgba(45, 212, 191, 0.55), var(--teal));
+    transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .sensor-value {
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    color: #dffaf6;
+  }
+
+  .sensors-note { margin-top: 14px; font-size: 11.5px; color: var(--muted-dim); line-height: 1.6; }
+
+  .note-list {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    font-size: 12px;
+    line-height: 1.62;
+    color: var(--muted);
+  }
+
+  .note-list strong { color: var(--text); font-weight: 600; }
+  .note-list li::marker { color: var(--teal); }
+
+  .notes-card .model-meta {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--muted-dim);
+  }
+
+  /* ---------------- state card ---------------- */
+
+  .score-wrap { display: flex; align-items: baseline; gap: 9px; margin: 4px 0 2px; }
+
+  .score {
+    font-size: clamp(58px, 7vw, 82px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(180deg, #ffffff, #bdf3e9);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .score-unit { font-size: 20px; color: var(--muted); font-weight: 500; }
+
+  .score-tag {
+    margin-left: 4px;
+    align-self: flex-start;
+    margin-top: 9px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    padding: 3px 8px;
+    white-space: nowrap;
+  }
+
+  .category {
+    display: inline-block;
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 5px 13px;
+    border-radius: 999px;
+    margin: 2px 0 18px;
+    border: 1px solid currentColor;
+    transition: color 0.2s ease, background 0.2s ease;
+  }
+
+  .gauge { position: relative; padding: 0 2px; }
+
+  .gauge-track {
+    height: 11px;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #ff6b6b 0%, #f6a15c 22%, #ffd166 46%, #9ede73 68%, #34d399 100%);
+    opacity: 0.92;
+  }
+
+  .gauge-marker {
+    position: absolute;
+    top: -5px;
+    left: 50%;
+    width: 3px;
+    height: 21px;
+    border-radius: 99px;
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.14), 0 0 18px rgba(255, 255, 255, 0.55);
+    transform: translateX(-50%);
+    transition: left 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .gauge-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 9px;
+    font-size: 10.5px;
+    color: rgba(143, 179, 176, 0.8);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .gauge-caption { display: flex; justify-content: space-between; margin-top: 4px; font-size: 10.5px; color: var(--muted-dim); }
+
+  .source-line {
+    margin: 16px 0 0;
+    padding: 10px 12px;
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--muted);
+  }
+
+  .source-line strong { color: var(--text); font-weight: 600; }
+  .source-line.measurement strong { color: var(--amber); }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .stat {
+    padding: 10px 12px;
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    min-width: 0;
+  }
+
+  .stat-label { display: block; font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted-dim); margin-bottom: 4px; }
+
+  .stat-value { font-family: var(--mono); font-size: 16px; font-variant-numeric: tabular-nums; color: var(--text); }
+  .stat-value.warn { color: var(--amber); }
+  .stat-value.flat { color: var(--muted); }
+
+  /* ---------------- correction card ---------------- */
+
+  .correction-card { position: relative; overflow: hidden; }
+
+  .correction-card.flash::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    border: 1px solid rgba(255, 122, 89, 0.9);
+    box-shadow: inset 0 0 60px rgba(255, 122, 89, 0.22);
+    animation: flashfade 0.9s ease-out forwards;
+  }
+
+  @keyframes flashfade {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  .field-label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-dim);
+    margin-bottom: 8px;
+  }
+
+  .measured-row { display: flex; gap: 9px; align-items: stretch; }
+
+  .measured-input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-size: 20px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-strong);
+    border-radius: 11px;
+    padding: 9px 14px;
+  }
+
+  .measured-input::-webkit-outer-spin-button,
+  .measured-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .measured-input { -moz-appearance: textfield; appearance: textfield; }
+
+  .sample-btn { white-space: nowrap; font-size: 12px; }
+
+  .hardwrite-btn {
+    margin-top: 12px;
+    width: 100%;
+    padding: 14px 16px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: #2a1108;
+    background: linear-gradient(120deg, #ffd166, #ff9a6b 55%, #ff7a59);
+    border: none;
+    border-radius: 13px;
+    cursor: pointer;
+    box-shadow: 0 10px 30px rgba(255, 122, 89, 0.24);
+    transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+  }
+
+  .hardwrite-btn:hover { transform: translateY(-1px); filter: brightness(1.05); box-shadow: 0 14px 36px rgba(255, 122, 89, 0.34); }
+  .hardwrite-btn:active { transform: translateY(0); }
+  .hardwrite-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+  .correction-hint { margin: 10px 0 0; font-size: 11.5px; line-height: 1.6; color: var(--muted-dim); }
+  .correction-hint strong { color: var(--muted); }
+
+  .correction-meta {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--muted);
+  }
+
+  .correction-meta .row { display: flex; justify-content: space-between; gap: 10px; }
+  .correction-meta .val { font-family: var(--mono); color: var(--text); font-variant-numeric: tabular-nums; }
+  .correction-meta .warn { color: var(--amber); }
+
+  .correction-error { min-height: 16px; margin-top: 6px; font-size: 12px; color: var(--danger); }
+
+  /* ---------------- events ---------------- */
+
+  .events-card { flex: 1; display: flex; flex-direction: column; min-height: 220px; }
+
+  .event-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    max-height: none;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  .event-list li {
+    display: flex;
+    gap: 9px;
+    align-items: baseline;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+    padding: 7px 10px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.028);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .event-tick {
+    flex: none;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--muted-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .event-kind { flex: none; width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; }
+  .event-kind.correction { background: var(--coral); box-shadow: 0 0 8px rgba(255, 122, 89, 0.7); }
+  .event-kind.init { background: var(--amber); }
+  .event-kind.control { background: var(--muted); }
+  .event-kind.reset { background: var(--muted); }
+
+  /* ---------------- footer ---------------- */
+
+  footer {
+    margin-top: 20px;
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: rgba(143, 179, 176, 0.55);
+  }
+
+  footer .model-meta { font-family: var(--mono); }
+
+  .run-hint {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    line-height: 1.6;
+    color: rgba(143, 179, 176, 0.5);
+  }
+
+  .run-hint code {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: rgba(221, 244, 240, 0.72);
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+
+  .conn-error {
+    margin-top: 12px;
+    min-height: 16px;
+    font-size: 12px;
+    color: var(--danger);
+  }
+
+  @media (max-width: 1080px) {
+    main { grid-template-columns: 1fr; }
+    .col-right { order: -1; }
+    #chart { height: 290px; }
+  }
+
+  @media (max-width: 720px) {
+    body { padding: 22px 14px 24px; }
+    .card { padding: 17px 16px; }
+    .sensor-row { grid-template-columns: 118px minmax(0, 1fr) 78px; gap: 9px; }
+    .sensor-name { font-size: 12px; }
+    .controls { margin-left: 0; }
+    #chart { height: 260px; }
+    #pipeline { min-width: 880px; }
+    .pipeline-scroll { -webkit-overflow-scrolling: touch; }
+    .pipeline-tag { display: none; }
+    .scroll-hint { display: inline-block; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="brand-row">
+      <div class="brand"><span class="dot"></span>Coral Health Lab</div>
+      <div class="version-tag">Full loop · v1 hard write</div>
+    </div>
+    <h1>Closed-Loop Reef Health Monitoring</h1>
+    <p class="sub">
+      The top half of the block diagram (Measurement → LightGBM → predicted CWCHI) runs live on
+      simulated sensors. The bottom half is the new part: instead of a Kalman filter, this version
+      does a <strong>hard write</strong> — when you press the button, the loop state is set directly
+      to the diver's measured CoralWatch health index. Between presses the loop keeps running on
+      its own predictions, so <span class="kalman">the correction is manual and never automatic</span>.
+    </p>
+
+    <div class="statusbar">
+      <span id="live-dot" class="live-dot"></span>
+      <strong id="loop-status">Loop running</strong>
+      <span class="sep">·</span>
+      <span id="tick-label" class="meta">tick 0</span>
+      <span class="sep">·</span>
+      <span id="site-label" class="meta">site 1/12</span>
+      <span class="sep">·</span>
+      <span id="interval-label" class="meta">1.0 s/day</span>
+      <div class="controls">
+        <button id="toggle-btn" type="button">Pause</button>
+        <select id="speed-select" aria-label="Loop speed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="4">4×</option>
+        </select>
+        <button id="reset-btn" type="button">Reset</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="card pipeline-card">
+    <div class="card-head">
+      <h2>The loop, live</h2>
+      <span class="tag pipeline-tag">measurement → prediction → output → correction</span>
+      <span class="tag scroll-hint">swipe sideways →</span>
+    </div>
+    <div class="pipeline-scroll">
+    <svg id="pipeline" viewBox="0 0 1200 430" role="img" aria-label="Closed loop block diagram with live values">
+      <defs>
+        <filter id="glow-teal" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="4" result="blur"></feGaussianBlur>
+          <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+        </filter>
+        <filter id="glow-coral" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="4" result="blur"></feGaussianBlur>
+          <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+        </filter>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(255,255,255,0.42)"></path>
+        </marker>
+      </defs>
+
+      <!-- measurement group -->
+      <g id="stage-measurement">
+        <text class="pipeline-label" x="195" y="30" text-anchor="middle">Measurement</text>
+        <rect class="pipeline-box" x="40" y="48" width="310" height="252" rx="4"></rect>
+        <!-- sensor parallelograms are generated by JS -->
+        <g id="sensor-shapes"></g>
+      </g>
+
+      <!-- prediction -->
+      <g id="stage-prediction">
+        <text class="pipeline-label" x="610" y="70" text-anchor="middle">Prediction</text>
+        <rect class="pipeline-box" x="470" y="84" width="280" height="130" rx="4"></rect>
+        <text class="pipeline-title" x="610" y="116" text-anchor="middle">LightGBM regressor</text>
+        <text class="pipeline-small" x="610" y="138" text-anchor="middle">predict CWCHI from</text>
+        <text class="pipeline-small" x="610" y="156" text-anchor="middle">probe parameters</text>
+        <text id="pipe-pred" class="pipeline-value" x="610" y="192" text-anchor="middle">pred —</text>
+      </g>
+
+      <!-- output -->
+      <g id="stage-output">
+        <text class="pipeline-label" x="1020" y="70" text-anchor="middle">Output</text>
+        <polygon class="pipeline-box" points="900,84 1160,84 1140,174 880,174"></polygon>
+        <text class="pipeline-small" x="1020" y="112" text-anchor="middle">Predicted coral health</text>
+        <text id="pipe-output" class="pipeline-big" x="1020" y="148" text-anchor="middle">—</text>
+      </g>
+
+      <!-- correction -->
+      <g id="stage-correction">
+        <text class="pipeline-label" x="610" y="238" text-anchor="middle">Correction</text>
+        <rect class="pipeline-box" x="470" y="252" width="280" height="100" rx="4"></rect>
+        <text class="pipeline-title" x="610" y="282" text-anchor="middle">Hard write: state ← measured</text>
+        <text class="pipeline-small" x="610" y="303" text-anchor="middle">CWCHI (Kalman filter placeholder)</text>
+        <text id="pipe-correction" class="pipeline-small" x="610" y="328" text-anchor="middle">no write yet</text>
+      </g>
+
+      <!-- diver -->
+      <g id="stage-diver">
+        <polygon class="pipeline-box dashed" points="900,312 1160,312 1140,402 880,402"></polygon>
+        <text class="pipeline-title" x="1020" y="338" text-anchor="middle">Diver check</text>
+        <text class="pipeline-small" x="1020" y="358" text-anchor="middle">manually defines</text>
+        <text class="pipeline-small" x="1020" y="375" text-anchor="middle">measured CWCHI (0–6)</text>
+      </g>
+
+      <!-- arrows -->
+      <path class="loop-arrow" d="M 354 150 H 462" marker-end="url(#arrow)"></path>
+      <path class="loop-arrow" d="M 754 150 H 882" marker-end="url(#arrow)"></path>
+      <path class="loop-arrow" d="M 1010 178 V 302 H 758" marker-end="url(#arrow)"></path>
+      <path class="loop-arrow" d="M 892 342 H 760" marker-end="url(#arrow)"></path>
+      <path class="loop-arrow" d="M 468 302 H 20 V 160 H 32" marker-end="url(#arrow)"></path>
+      <text class="pipeline-small" x="40" y="322" text-anchor="start" fill="rgba(143,179,176,0.55)">corrected state feeds the next loop</text>
+    </svg>
+    </div>
+  </section>
+
+  <main>
+    <div class="col col-left">
+      <section class="card">
+        <div class="card-head">
+          <h2>Loop history</h2>
+          <span class="tag">live · 1 tick = 1 simulated day</span>
+        </div>
+        <div class="legend">
+          <span><i class="swatch state"></i>Loop state (predicted CWCHI)</span>
+          <span><i class="swatch truth"></i>Simulated reef truth (hidden in deployment)</span>
+          <span><i class="swatch correction"></i>Hard-write correction</span>
+        </div>
+        <div class="chart-wrap"><canvas id="chart" aria-label="Coral health index over loop ticks"></canvas></div>
+        <div class="chart-foot">
+          <span>Coloured band = |prediction error| against the simulated ground truth.</span>
+          <span id="chart-window">window: last 240 ticks</span>
+        </div>
+      </section>
+
+      <section class="card sensors-card">
+        <div class="card-head">
+          <h2>Measurement</h2>
+          <span class="tag">live probe readings · feeds LightGBM every tick</span>
+        </div>
+        <div id="sensor-list" class="sensor-list"></div>
+        <p class="sensors-note">
+          These five parameters are fresh sensor measurements each loop tick. Only the
+          CoralWatch health index is carried as loop state — the correction button does not
+          touch the probes.
+        </p>
+      </section>
+
+      <section class="card notes-card">
+        <div class="card-head">
+          <h2>Simulation notes</h2>
+          <span class="tag amber">v1 · hard write</span>
+        </div>
+        <ul class="note-list">
+          <li><strong>Ground truth is simulated.</strong> The dashed coral line is the reef the
+            probes are actually sampling. In a real deployment you would not see it; it is
+            shown here so you can watch the prediction drift and snap back.</li>
+          <li><strong>Loop state = CoralWatch health index.</strong> Only CWCHI is carried
+            between ticks. The five probe parameters are measured fresh every tick and are not
+            part of the corrected state.</li>
+          <li><strong>Hard write, not Kalman.</strong> Each button press writes the diver's
+            measured CWCHI into the state once. Nothing is corrected automatically; replacing
+            this with a real Kalman filter is the next version.</li>
+        </ul>
+        <div id="model-meta" class="model-meta">Model: LightGBM · loading…</div>
+      </section>
+    </div>
+
+    <div class="col col-right">
+      <section class="card">
+        <div class="card-head">
+          <h2>Current loop state</h2>
+          <span class="tag coral">state = CWCHI</span>
+        </div>
+        <div class="score-wrap">
+          <div id="score" class="score">—</div>
+          <div class="score-unit">/ 6</div>
+          <span class="score-tag">CoralWatch index</span>
+        </div>
+        <div id="category" class="category">Waiting for loop…</div>
+
+        <div class="gauge">
+          <div class="gauge-track"></div>
+          <div id="gauge-marker" class="gauge-marker" style="left: 50%"></div>
+          <div class="gauge-ticks"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span></div>
+          <div class="gauge-caption"><span>Fully bleached</span><span>Very healthy</span></div>
+        </div>
+
+        <div id="source-line" class="source-line">—</div>
+
+        <div class="stat-grid">
+          <div class="stat">
+            <span class="stat-label">Last prediction</span>
+            <span id="stat-prediction" class="stat-value">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Error vs sim truth</span>
+            <span id="stat-error" class="stat-value">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Mean |error| since write</span>
+            <span id="stat-mae" class="stat-value">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Hard writes</span>
+            <span id="stat-writes" class="stat-value">0</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="correction-card" class="card correction-card">
+        <div class="card-head">
+          <h2>Correction</h2>
+          <span class="tag amber">v1 · replaces Kalman</span>
+        </div>
+        <label class="field-label" for="measured-input">Diver measured CWCHI (manual input)</label>
+        <div class="measured-row">
+          <input id="measured-input" class="measured-input" type="number" min="0" max="6" step="0.01" value="3.00" inputmode="decimal" aria-label="Diver measured CWCHI">
+          <button id="sample-btn" class="sample-btn" type="button" title="Simulation helper: sample the simulated reef with measurement noise">Sample diver read</button>
+        </div>
+        <button id="hardwrite-btn" class="hardwrite-btn" type="button">Hard-write state ← measured CWCHI</button>
+        <p class="correction-hint">
+          Pressing this sets <strong>state := measured CWCHI</strong> once. The loop is not paused:
+          if you don't press it, predictions keep feeding forward and the state can drift from the
+          reef — which is exactly what the periodic diver checks are meant to catch.
+        </p>
+        <div class="correction-meta">
+          <div class="row"><span>Last hard write</span><span id="meta-correction" class="val">none yet</span></div>
+          <div class="row"><span>Open-loop for</span><span id="meta-age" class="val">0 ticks</span></div>
+          <div class="row"><span>Diver check source</span><span class="val">manual (0–6)</span></div>
+        </div>
+        <div id="correction-error" class="correction-error" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="card events-card">
+        <div class="card-head">
+          <h2>Loop events</h2>
+          <span class="tag">newest first</span>
+        </div>
+        <ul id="event-list" class="event-list"></ul>
+      </section>
+    </div>
+  </main>
+
+
+  <footer>
+    <span>
+      Simulation: synthetic reef trajectory (same generator as the training data) — for
+      demonstration only, not a scientific conclusion about real reefs.
+    </span>
+  </footer>
+
+  <div class="run-hint">
+    <span>Upper-half slider demo (kept separate): <code>.venv/bin/python server/app.py</code> → http://127.0.0.1:8000</span>
+    <span>Full loop (this page): <code>.venv/bin/python server/loop_app.py</code> → http://127.0.0.1:8001</span>
+  </div>
+
+  <div id="conn-error" class="conn-error" role="alert"></div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const HEALTH_MIN = 0;
+  const HEALTH_MAX = 6;
+  const WINDOW_TICKS = 240;
+  const POLL_MS = 400;
+
+  const SENSORS = [
+    { key: "dissolved_oxygen", label: "Dissolved oxygen", unit: "mg/L" },
+    { key: "ph", label: "pH", unit: "" },
+    { key: "temperature", label: "Water temperature", unit: "°C" },
+    { key: "zooxanthellae", label: "Zooxanthellae density", unit: "million cells/cm²" },
+    { key: "nitrate", label: "Nitrate", unit: "µmol/L" },
+  ];
+
+  const SENSOR_SHAPE_GEOMETRY = [
+    { label: "Oxygen" },
+    { label: "pH" },
+    { label: "Temperature" },
+    { label: "Zooxanthellae" },
+    { label: "Nitrate" },
+  ];
+
+  const els = {
+    liveDot: document.getElementById("live-dot"),
+    loopStatus: document.getElementById("loop-status"),
+    tickLabel: document.getElementById("tick-label"),
+    siteLabel: document.getElementById("site-label"),
+    intervalLabel: document.getElementById("interval-label"),
+    toggleBtn: document.getElementById("toggle-btn"),
+    speedSelect: document.getElementById("speed-select"),
+    resetBtn: document.getElementById("reset-btn"),
+    score: document.getElementById("score"),
+    category: document.getElementById("category"),
+    marker: document.getElementById("gauge-marker"),
+    sourceLine: document.getElementById("source-line"),
+    statPrediction: document.getElementById("stat-prediction"),
+    statError: document.getElementById("stat-error"),
+    statMae: document.getElementById("stat-mae"),
+    statWrites: document.getElementById("stat-writes"),
+    chart: document.getElementById("chart"),
+    sensorList: document.getElementById("sensor-list"),
+    correctionCard: document.getElementById("correction-card"),
+    measuredInput: document.getElementById("measured-input"),
+    sampleBtn: document.getElementById("sample-btn"),
+    hardwriteBtn: document.getElementById("hardwrite-btn"),
+    correctionError: document.getElementById("correction-error"),
+    metaCorrection: document.getElementById("meta-correction"),
+    metaAge: document.getElementById("meta-age"),
+    eventList: document.getElementById("event-list"),
+    modelMeta: document.getElementById("model-meta"),
+    connError: document.getElementById("conn-error"),
+    pipePred: document.getElementById("pipe-pred"),
+    pipeOutput: document.getElementById("pipe-output"),
+    pipeCorrection: document.getElementById("pipe-correction"),
+    sensorShapes: document.getElementById("sensor-shapes"),
+    stageMeasurement: document.getElementById("stage-measurement"),
+    stagePrediction: document.getElementById("stage-prediction"),
+    stageOutput: document.getElementById("stage-output"),
+    stageCorrection: document.getElementById("stage-correction"),
+    stageDiver: document.getElementById("stage-diver"),
+  };
+
+  const app = {
+    snapshot: null,
+    lastTick: -1,
+    lastCorrections: -1,
+    pollTimer: null,
+    sensorNodes: new Map(),
+  };
+
+  function clamp(value, low, high) {
+    return Math.min(high, Math.max(low, value));
+  }
+
+  function fmt(value, decimals = 2) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    return number.toFixed(decimals);
+  }
+
+  function signed(value, decimals = 2) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    const sign = number > 0.0005 ? "+" : "";
+    return `${sign}${number.toFixed(decimals)}`;
+  }
+
+  function categoryFor(value) {
+    if (value < 0.8) return { text: "Severely bleached", color: "#ff6b6b" };
+    if (value < 1.8) return { text: "Bleaching risk", color: "#ff8a5c" };
+    if (value < 2.8) return { text: "Stressed", color: "#f6b756" };
+    if (value < 4.0) return { text: "Fair", color: "#ffd166" };
+    if (value < 5.0) return { text: "Healthy", color: "#7ed957" };
+    return { text: "Very healthy", color: "#34d399" };
+  }
+
+  async function api(path, options) {
+    const response = await fetch(path, options);
+    let body = null;
+    try {
+      body = await response.json();
+    } catch (_) { /* ignore non-JSON */ }
+    if (!response.ok) {
+      throw new Error((body && body.error) || `HTTP ${response.status}`);
+    }
+    return body;
+  }
+
+  function restartAnimation(node, className, duration) {
+    if (!node) return;
+    node.classList.remove(className);
+    // Force a reflow so the animation can restart.
+    void node.getBoundingClientRect();
+    node.classList.add(className);
+    window.setTimeout(() => node.classList.remove(className), duration);
+  }
+
+  // ------------------------------------------------------------------ //
+  // Pipeline: build the five sensor parallelograms once
+  // ------------------------------------------------------------------ //
+
+  function buildPipelineSensors() {
+    const namespace = "http://www.w3.org/2000/svg";
+    els.sensorShapes.innerHTML = "";
+    app.sensorNodes.clear();
+
+    SENSORS.forEach((sensor, index) => {
+      const y = 70 + index * 44;
+      const polygon = document.createElementNS(namespace, "polygon");
+      polygon.setAttribute("points", `70,${y} 330,${y} 316,${y + 34} 56,${y + 34}`);
+      polygon.setAttribute("class", "pipeline-box");
+      els.sensorShapes.append(polygon);
+
+      const label = document.createElementNS(namespace, "text");
+      label.setAttribute("class", "pipeline-sensor");
+      label.setAttribute("x", "86");
+      label.setAttribute("y", String(y + 22));
+      label.textContent = SENSOR_SHAPE_GEOMETRY[index].label;
+      els.sensorShapes.append(label);
+
+      const reading = document.createElementNS(namespace, "text");
+      reading.setAttribute("class", "pipeline-reading");
+      reading.setAttribute("x", "320");
+      reading.setAttribute("y", String(y + 22));
+      reading.setAttribute("text-anchor", "end");
+      reading.textContent = "—";
+      els.sensorShapes.append(reading);
+
+      app.sensorNodes.set(sensor.key, reading);
+    });
+  }
+
+  function buildSensorRows() {
+    els.sensorList.innerHTML = "";
+    for (const sensor of SENSORS) {
+      const row = document.createElement("div");
+      row.className = "sensor-row";
+
+      const name = document.createElement("div");
+      name.className = "sensor-name";
+      name.innerHTML = `${sensor.label}${sensor.unit ? `<span class="sensor-unit">${sensor.unit}</span>` : ""}`;
+
+      const bar = document.createElement("div");
+      bar.className = "sensor-bar";
+      const fill = document.createElement("i");
+      bar.append(fill);
+
+      const value = document.createElement("div");
+      value.className = "sensor-value";
+      value.textContent = "—";
+
+      row.append(name, bar, value);
+      els.sensorList.append(row);
+      app.sensorNodes.set(`row-${sensor.key}`, { fill, value });
+    }
+  }
+
+  // ------------------------------------------------------------------ //
+  // Rendering
+  // ------------------------------------------------------------------ //
+
+  function renderStatus(snapshot) {
+    const running = Boolean(snapshot.running);
+    els.loopStatus.textContent = running ? "Loop running" : "Loop paused";
+    els.liveDot.classList.toggle("paused", !running);
+    els.tickLabel.textContent = `tick ${snapshot.tick}`;
+    els.siteLabel.textContent = `site ${snapshot.site}/${snapshot.sites} · day ${snapshot.day}`;
+    const interval = Number(snapshot.interval) || 1;
+    els.intervalLabel.textContent = `${interval.toFixed(2)} s/day`;
+    els.toggleBtn.textContent = running ? "Pause" : "Resume";
+    const speed = String(snapshot.speed);
+    if (els.speedSelect.value !== speed) els.speedSelect.value = speed;
+  }
+
+  function renderState(snapshot) {
+    const state = snapshot.state || {};
+    const score = Number(state.cwchi);
+    els.score.textContent = fmt(score, 2);
+
+    const category = categoryFor(score);
+    els.category.textContent = category.text;
+    els.category.style.color = category.color;
+    els.category.style.background = `${category.color}1f`;
+    els.category.style.borderColor = `${category.color}66`;
+
+    const ratio = clamp((score - HEALTH_MIN) / (HEALTH_MAX - HEALTH_MIN), 0, 1);
+    els.marker.style.left = `${(ratio * 100).toFixed(2)}%`;
+
+    let source = "";
+    if (state.source === "measurement") {
+      const last = snapshot.last_correction;
+      source = last
+        ? `<strong>Hard-set from the diver's measured CWCHI</strong> at tick ${last.tick}: state <strong>${fmt(last.before, 2)} → ${fmt(last.measured, 2)}</strong>. The next tick's prediction carries on from this written state.`
+        : "<strong>Hard-set from the diver's measured CWCHI.</strong>";
+      els.sourceLine.classList.add("measurement");
+    } else if (state.source === "init") {
+      source = `<strong>Initialised from the first diver transect</strong> — the loop has not needed a hard write yet.`;
+      els.sourceLine.classList.remove("measurement");
+    } else {
+      source = `<strong>Carried by the last LightGBM prediction</strong> (tick ${snapshot.tick}). The loop is open-loop since the last hard write — no measurement has been written into the state.`;
+      els.sourceLine.classList.remove("measurement");
+    }
+    els.sourceLine.innerHTML = source;
+
+    els.statPrediction.textContent = snapshot.last_prediction == null ? "—" : fmt(snapshot.last_prediction, 2);
+
+    const error = Number(snapshot.error);
+    els.statError.textContent = signed(error, 2);
+    els.statError.className = "stat-value " + (Math.abs(error) < 0.05 ? "flat" : "warn");
+
+    els.statMae.textContent = snapshot.mean_abs_error == null ? "—" : fmt(snapshot.mean_abs_error, 2);
+    els.statWrites.textContent = String(state.corrections ?? 0);
+  }
+
+  function renderSensors(snapshot) {
+    for (const sensor of snapshot.sensors || []) {
+      const row = app.sensorNodes.get(`row-${sensor.key}`);
+      if (row) {
+        row.value.textContent = fmt(sensor.value, sensor.decimals);
+        const span = Number(sensor.max) - Number(sensor.min) || 1;
+        const ratio = clamp((Number(sensor.value) - Number(sensor.min)) / span, 0.02, 0.98);
+        row.fill.style.width = `${(ratio * 100).toFixed(1)}%`;
+      }
+      const reading = app.sensorNodes.get(sensor.key);
+      if (reading) {
+        reading.textContent = fmt(sensor.value, sensor.decimals);
+      }
+    }
+  }
+
+  function renderPipeline(snapshot) {
+    const state = snapshot.state || {};
+    els.pipePred.textContent = snapshot.last_prediction == null ? "pred —" : `pred ${fmt(snapshot.last_prediction, 2)}`;
+    els.pipeOutput.textContent = `${fmt(state.cwchi, 2)} / 6`;
+    const last = snapshot.last_correction;
+    els.pipeCorrection.textContent = last
+      ? `last write: ${fmt(last.measured, 2)} · tick ${last.tick}`
+      : "no write yet · loop is open-loop";
+  }
+
+  function renderCorrection(snapshot) {
+    const state = snapshot.state || {};
+    const last = snapshot.last_correction;
+    if (last) {
+      els.metaCorrection.textContent = `tick ${last.tick} · ${fmt(last.measured, 2)} (was ${fmt(last.before, 2)})`;
+    } else {
+      els.metaCorrection.textContent = "none yet";
+    }
+
+    const age = Number(state.ticks_since_correction ?? 0);
+    els.metaAge.textContent = `${age} tick${age === 1 ? "" : "s"}`;
+    els.metaAge.classList.toggle("warn", age > 120);
+  }
+
+  function renderEvents(snapshot) {
+    const events = Array.isArray(snapshot.events) ? snapshot.events : [];
+    if (!events.length) {
+      els.eventList.innerHTML = '<li><span class="event-tick">—</span><span>No events yet.</span></li>';
+      return;
+    }
+    els.eventList.innerHTML = "";
+    for (const event of events) {
+      const item = document.createElement("li");
+      const kind = String(event.kind || "control");
+      item.innerHTML =
+        `<span class="event-kind ${kind}"></span>` +
+        `<span class="event-tick">t=${event.tick}</span>` +
+        `<span>${String(event.text || "")}</span>`;
+      els.eventList.append(item);
+    }
+  }
+
+  function renderModel(model) {
+    if (!model) return;
+    const parts = ["LightGBM", `${model.trees} trees`];
+    if (model.metrics && typeof model.metrics.mae === "number") {
+      parts.push(`training MAE ${model.metrics.mae.toFixed(3)}`);
+      if (typeof model.metrics.r2 === "number") parts.push(`R² ${model.metrics.r2.toFixed(3)}`);
+      parts.push(`${model.metrics.rows} rows`);
+    }
+    els.modelMeta.textContent = `Model: ${parts.join(" · ")}`;
+  }
+
+  // ------------------------------------------------------------------ //
+  // Chart
+  // ------------------------------------------------------------------ //
+
+  function fitCanvas(canvas) {
+    const mobile = window.matchMedia("(max-width: 720px)").matches;
+    const cssHeight = mobile ? 260 : window.matchMedia("(max-width: 1080px)").matches ? 290 : 330;
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.max(280, canvas.parentElement.getBoundingClientRect().width);
+    const height = cssHeight;
+
+    const targetWidth = Math.round(width * dpr);
+    const targetHeight = Math.round(height * dpr);
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
+    canvas.style.height = `${height}px`;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, width, height };
+  }
+
+  function drawChart(snapshot) {
+    const { ctx, width, height } = fitCanvas(els.chart);
+    ctx.clearRect(0, 0, width, height);
+
+    const padding = { top: 14, right: 16, bottom: 28, left: 38 };
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+
+    const history = Array.isArray(snapshot.history) ? snapshot.history : [];
+    const windowed = history.slice(-WINDOW_TICKS);
+
+    const xFor = (index) => padding.left + (windowed.length <= 1 ? 0 : (index / (windowed.length - 1)) * plotWidth);
+    const yFor = (value) => padding.top + (1 - clamp(value / HEALTH_MAX, 0, 1)) * plotHeight;
+
+    // Grid
+    ctx.strokeStyle = "rgba(255,255,255,0.06)";
+    ctx.fillStyle = "rgba(143,179,176,0.72)";
+    ctx.lineWidth = 1;
+    ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for (let value = 0; value <= HEALTH_MAX; value += 1) {
+      const y = yFor(value);
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(width - padding.right, y);
+      ctx.stroke();
+      ctx.fillText(String(value), padding.left - 8, y);
+    }
+
+    if (windowed.length < 2) {
+      ctx.fillStyle = "rgba(143,179,176,0.6)";
+      ctx.font = "12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Collecting loop history…", width / 2, height / 2);
+      return;
+    }
+
+    // X grid / tick labels
+    const tickStart = windowed[0].t;
+    const tickEnd = windowed[windowed.length - 1].t;
+    const step = tickEnd - tickStart > 180 ? 60 : tickEnd - tickStart > 90 ? 30 : tickEnd - tickStart > 40 ? 15 : 10;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for (let tick = Math.ceil(tickStart / step) * step; tick <= tickEnd; tick += step) {
+      const index = windowed.findIndex((point) => point.t >= tick);
+      if (index < 0) continue;
+      const x = xFor(index);
+      ctx.strokeStyle = "rgba(255,255,255,0.035)";
+      ctx.beginPath();
+      ctx.moveTo(x, padding.top);
+      ctx.lineTo(x, padding.top + plotHeight);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(143,179,176,0.55)";
+      ctx.fillText(String(tick), x, padding.top + plotHeight + 8);
+    }
+
+    // Error band between truth and state
+    ctx.beginPath();
+    windowed.forEach((point, index) => {
+      const x = xFor(index);
+      const y = yFor(point.true);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    for (let index = windowed.length - 1; index >= 0; index -= 1) {
+      ctx.lineTo(xFor(index), yFor(windowed[index].state));
+    }
+    ctx.closePath();
+    const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + plotHeight);
+    gradient.addColorStop(0, "rgba(255,122,89,0.16)");
+    gradient.addColorStop(1, "rgba(255,122,89,0.05)");
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // Simulated truth
+    ctx.save();
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = "rgba(255,143,111,0.78)";
+    ctx.beginPath();
+    windowed.forEach((point, index) => {
+      const x = xFor(index);
+      const y = yFor(point.true);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.restore();
+
+    // Loop state line
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = "#2dd4bf";
+    ctx.shadowColor = "rgba(45,212,191,0.55)";
+    ctx.shadowBlur = 9;
+    ctx.beginPath();
+    windowed.forEach((point, index) => {
+      const x = xFor(index);
+      const y = yFor(point.state);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.restore();
+
+    // Correction / init markers
+    windowed.forEach((point, index) => {
+      if (!point.corrected && !point.init) return;
+      const x = xFor(index);
+      const y = yFor(point.state);
+      ctx.save();
+      ctx.setLineDash([3, 4]);
+      ctx.strokeStyle = point.init ? "rgba(255,209,102,0.34)" : "rgba(255,255,255,0.34)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, padding.top);
+      ctx.lineTo(x, padding.top + plotHeight);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = point.init ? "#ffd166" : "#ffffff";
+      ctx.shadowColor = point.init ? "rgba(255,209,102,0.8)" : "rgba(255,255,255,0.8)";
+      ctx.shadowBlur = 8;
+      ctx.fillRect(-3, -3, 6, 6);
+      ctx.restore();
+    });
+
+    // Latest point
+    const lastPoint = windowed[windowed.length - 1];
+    const lastX = xFor(windowed.length - 1);
+    const lastY = yFor(lastPoint.state);
+    ctx.save();
+    ctx.shadowColor = "rgba(45,212,191,0.9)";
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Axis hint
+    ctx.fillStyle = "rgba(143,179,176,0.5)";
+    ctx.font = "10px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("CWCHI", padding.left - 34, padding.top - 12);
+  }
+
+  // ------------------------------------------------------------------ //
+  // Main render
+  // ------------------------------------------------------------------ //
+
+  function render(snapshot) {
+    app.snapshot = snapshot;
+
+    renderStatus(snapshot);
+    renderState(snapshot);
+    renderSensors(snapshot);
+    renderPipeline(snapshot);
+    renderCorrection(snapshot);
+    renderEvents(snapshot);
+    renderModel(snapshot.model);
+    drawChart(snapshot);
+
+    if (app.lastTick !== snapshot.tick) {
+      if (app.lastTick >= 0) {
+        restartAnimation(els.stageMeasurement, "stage-active", 420);
+        restartAnimation(els.stagePrediction, "stage-active", 420);
+        restartAnimation(els.stageOutput, "stage-active", 420);
+      }
+      app.lastTick = snapshot.tick;
+    }
+
+    const corrections = Number(snapshot.state?.corrections ?? 0);
+    if (app.lastCorrections >= 0 && corrections > app.lastCorrections) {
+      restartAnimation(els.correctionCard, "flash", 900);
+      restartAnimation(els.stageCorrection, "stage-active", 900);
+    }
+    app.lastCorrections = corrections;
+
+  }
+
+  // ------------------------------------------------------------------ //
+  // Polling
+  // ------------------------------------------------------------------ //
+
+  async function poll() {
+    try {
+      const snapshot = await api("/api/state");
+      els.connError.textContent = "";
+      render(snapshot);
+    } catch (error) {
+      els.connError.textContent =
+        `Lost connection to the loop service (${error.message}). Is server/loop_app.py running?`;
+    }
+    app.pollTimer = window.setTimeout(poll, POLL_MS);
+  }
+
+  // ------------------------------------------------------------------ //
+  // Controls
+  // ------------------------------------------------------------------ //
+
+  async function postJSON(path, payload) {
+    return api(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async function toggleLoop() {
+    if (!app.snapshot) return;
+    els.toggleBtn.disabled = true;
+    try {
+      const snapshot = await postJSON("/api/control", { running: !app.snapshot.running });
+      render(snapshot);
+    } catch (error) {
+      els.correctionError.textContent = error.message;
+    } finally {
+      els.toggleBtn.disabled = false;
+    }
+  }
+
+  async function resetLoop() {
+    els.resetBtn.disabled = true;
+    try {
+      const snapshot = await postJSON("/api/control", { reset: true });
+      app.lastTick = -1;
+      app.lastCorrections = -1;
+      render(snapshot);
+    } catch (error) {
+      els.connError.textContent = error.message;
+    } finally {
+      els.resetBtn.disabled = false;
+    }
+  }
+
+  async function changeSpeed() {
+    const speed = Number(els.speedSelect.value);
+    try {
+      const snapshot = await postJSON("/api/control", { speed });
+      render(snapshot);
+    } catch (error) {
+      els.connError.textContent = error.message;
+    }
+  }
+
+  async function sampleDiverReading() {
+    els.sampleBtn.disabled = true;
+    try {
+      const sample = await api("/api/diver-sample?noise=0.12");
+      els.measuredInput.value = Number(sample.measured).toFixed(2);
+      restartAnimation(els.stageDiver, "stage-active", 650);
+      els.correctionError.textContent = "";
+    } catch (error) {
+      els.correctionError.textContent = `Could not sample the simulated reef: ${error.message}`;
+    } finally {
+      els.sampleBtn.disabled = false;
+    }
+  }
+
+  async function hardWrite() {
+    const raw = Number(els.measuredInput.value);
+    if (!Number.isFinite(raw)) {
+      els.correctionError.textContent = "Enter a numeric measured CWCHI between 0 and 6.";
+      return;
+    }
+    if (raw < HEALTH_MIN || raw > HEALTH_MAX) {
+      els.correctionError.textContent = "Measured CWCHI must be between 0 and 6.";
+      return;
+    }
+    els.correctionError.textContent = "";
+    els.hardwriteBtn.disabled = true;
+    els.hardwriteBtn.textContent = "Writing measured state…";
+    try {
+      const snapshot = await postJSON("/api/correct", { measured: raw });
+      render(snapshot);
+      els.measuredInput.value = Number(snapshot.state.cwchi).toFixed(2);
+      restartAnimation(els.correctionCard, "flash", 900);
+      restartAnimation(els.stageCorrection, "stage-active", 900);
+    } catch (error) {
+      els.correctionError.textContent = `Hard write failed: ${error.message}`;
+    } finally {
+      els.hardwriteBtn.disabled = false;
+      els.hardwriteBtn.textContent = "Hard-write state ← measured CWCHI";
+    }
+  }
+
+  // ------------------------------------------------------------------ //
+  // Init
+  // ------------------------------------------------------------------ //
+
+  function init() {
+    buildPipelineSensors();
+    buildSensorRows();
+
+    els.toggleBtn.addEventListener("click", toggleLoop);
+    els.resetBtn.addEventListener("click", resetLoop);
+    els.speedSelect.addEventListener("change", changeSpeed);
+    els.sampleBtn.addEventListener("click", sampleDiverReading);
+    els.hardwriteBtn.addEventListener("click", hardWrite);
+    els.measuredInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") hardWrite();
+    });
+
+    window.addEventListener("resize", () => {
+      if (app.snapshot) drawChart(app.snapshot);
+    });
+
+    poll();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
