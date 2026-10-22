@@ -259,6 +259,13 @@
   .swatch.state { background: var(--teal); box-shadow: 0 0 8px rgba(45, 212, 191, 0.7); }
   .swatch.truth { background: var(--coral); opacity: 0.75; }
   .swatch.correction { width: 9px; height: 9px; border-radius: 2px; background: #ffffff; transform: rotate(45deg); }
+  .swatch.uncertainty {
+    width: 16px;
+    height: 9px;
+    border-radius: 3px;
+    background: rgba(45, 212, 191, 0.16);
+    border: 1px solid rgba(45, 212, 191, 0.42);
+  }
 
   .chart-wrap { position: relative; width: 100%; }
 
@@ -482,6 +489,7 @@
 
   .source-line strong { color: var(--text); font-weight: 600; }
   .source-line.measurement strong { color: var(--amber); }
+  .source-line.kalman strong { color: var(--teal); }
 
   .stat-grid {
     display: grid;
@@ -507,6 +515,54 @@
   /* ---------------- correction card ---------------- */
 
   .correction-card { position: relative; overflow: hidden; }
+
+  .algorithm-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .algo-btn {
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .algo-btn:hover { background: rgba(45, 212, 191, 0.10); color: var(--text); }
+
+  .algo-btn.is-active {
+    color: var(--text);
+    background: rgba(45, 212, 191, 0.14);
+    border-color: rgba(45, 212, 191, 0.45);
+  }
+
+  .algo-btn.is-active[data-algorithm="hard"] {
+    background: rgba(255, 122, 89, 0.13);
+    border-color: rgba(255, 122, 89, 0.45);
+  }
+
+  .algo-btn:disabled { opacity: 0.55; cursor: wait; }
+
+  .algorithm-note {
+    margin: 0 0 14px;
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: var(--muted-dim);
+  }
+
+  .algorithm-note strong { color: var(--muted); }
 
   .correction-card.flash::after {
     content: "";
@@ -555,6 +611,21 @@
 
   .sample-btn { white-space: nowrap; font-size: 12px; }
 
+  .sample-btn.is-active {
+    border-color: rgba(45, 212, 191, 0.55);
+    background: rgba(45, 212, 191, 0.14);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.12);
+  }
+
+  .diver-mode-note {
+    margin: 8px 0 0;
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--muted-dim);
+    min-height: 17px;
+  }
+
   .hardwrite-btn {
     margin-top: 12px;
     width: 100%;
@@ -570,6 +641,14 @@
     box-shadow: 0 10px 30px rgba(255, 122, 89, 0.24);
     transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
   }
+
+  .hardwrite-btn[data-algorithm="kalman"] {
+    color: #04231f;
+    background: linear-gradient(120deg, #7ef4dc, #2dd4bf 55%, #21b6a4);
+    box-shadow: 0 10px 30px rgba(45, 212, 191, 0.24);
+  }
+
+  .hardwrite-btn[data-algorithm="kalman"]:hover { box-shadow: 0 14px 36px rgba(45, 212, 191, 0.34); }
 
   .hardwrite-btn:hover { transform: translateY(-1px); filter: brightness(1.05); box-shadow: 0 14px 36px rgba(255, 122, 89, 0.34); }
   .hardwrite-btn:active { transform: translateY(0); }
@@ -707,15 +786,16 @@
   <header>
     <div class="brand-row">
       <div class="brand"><span class="dot"></span>Coral Health Lab</div>
-      <div class="version-tag">Full loop · v1 hard write</div>
+      <div class="version-tag">Full loop · v2 · Kalman + hard write</div>
     </div>
     <h1>Closed-Loop Reef Health Monitoring</h1>
     <p class="sub">
       The top half of the block diagram (Measurement → LightGBM → predicted CWCHI) runs live on
-      simulated sensors. The bottom half is the new part: instead of a Kalman filter, this version
-      does a <strong>hard write</strong> — when you press the button, the loop state is set directly
-      to the diver's measured CoralWatch health index. Between presses the loop keeps running on
-      its own predictions, so <span class="kalman">the correction is manual and never automatic</span>.
+      simulated sensors. The bottom half is the correction stage, and you can switch its
+      algorithm live: a <strong>1-D Kalman filter</strong> fuses the prediction with the diver's
+      measured CoralWatch health index using gain K = P/(P+R), while the v1 <strong>hard write</strong>
+      sets the state straight to that measurement. Neither runs automatically — between presses the
+      loop keeps predicting, so <span class="kalman">the correction is manual and never automatic</span>.
     </p>
 
     <div class="statusbar">
@@ -727,6 +807,8 @@
       <span id="site-label" class="meta">site 1/12</span>
       <span class="sep">·</span>
       <span id="interval-label" class="meta">1.0 s/day</span>
+      <span class="sep">·</span>
+      <span id="algorithm-status" class="meta">Kalman filter</span>
       <div class="controls">
         <button id="toggle-btn" type="button">Pause</button>
         <select id="speed-select" aria-label="Loop speed">
@@ -792,9 +874,9 @@
       <g id="stage-correction">
         <text class="pipeline-label" x="610" y="238" text-anchor="middle">Correction</text>
         <rect class="pipeline-box" x="470" y="252" width="280" height="100" rx="4"></rect>
-        <text class="pipeline-title" x="610" y="282" text-anchor="middle">Hard write: state ← measured</text>
-        <text class="pipeline-small" x="610" y="303" text-anchor="middle">CWCHI (Kalman filter placeholder)</text>
-        <text id="pipe-correction" class="pipeline-small" x="610" y="328" text-anchor="middle">no write yet</text>
+        <text class="pipeline-title" x="610" y="282" text-anchor="middle">Correction: state ← measured</text>
+        <text id="pipe-algorithm" class="pipeline-small" x="610" y="303" text-anchor="middle">algorithm: Kalman filter</text>
+        <text id="pipe-correction" class="pipeline-small" x="610" y="328" text-anchor="middle">no correction yet · loop is open-loop</text>
       </g>
 
       <!-- diver -->
@@ -810,8 +892,8 @@
       <path class="loop-arrow" d="M 754 150 H 882" marker-end="url(#arrow)"></path>
       <path class="loop-arrow" d="M 1010 178 V 302 H 758" marker-end="url(#arrow)"></path>
       <path class="loop-arrow" d="M 892 342 H 760" marker-end="url(#arrow)"></path>
-      <path class="loop-arrow" d="M 468 302 H 20 V 160 H 32" marker-end="url(#arrow)"></path>
-      <text class="pipeline-small" x="40" y="322" text-anchor="start" fill="rgba(143,179,176,0.55)">corrected state feeds the next loop</text>
+      <path class="loop-arrow" d="M 468 320 H 20 V 160 H 32" marker-end="url(#arrow)"></path>
+      <text class="pipeline-small" x="40" y="340" text-anchor="start" fill="rgba(143,179,176,0.55)">corrected state feeds the next loop</text>
     </svg>
     </div>
   </section>
@@ -826,11 +908,12 @@
         <div class="legend">
           <span><i class="swatch state"></i>Loop state (predicted CWCHI)</span>
           <span><i class="swatch truth"></i>Simulated reef truth (hidden in deployment)</span>
-          <span><i class="swatch correction"></i>Hard-write correction</span>
+          <span><i class="swatch correction"></i>Correction (teal = Kalman, white = hard)</span>
+          <span><i class="swatch uncertainty"></i>Kalman ±1σ uncertainty</span>
         </div>
         <div class="chart-wrap"><canvas id="chart" aria-label="Coral health index over loop ticks"></canvas></div>
         <div class="chart-foot">
-          <span>Coloured band = |prediction error| against the simulated ground truth.</span>
+          <span>Coral band = |prediction error| vs. simulated truth · teal band = Kalman ±1σ state uncertainty.</span>
           <span id="chart-window">window: last 240 ticks</span>
         </div>
       </section>
@@ -851,7 +934,7 @@
       <section class="card notes-card">
         <div class="card-head">
           <h2>Simulation notes</h2>
-          <span class="tag amber">v1 · hard write</span>
+          <span class="tag amber">v2 · two algorithms</span>
         </div>
         <ul class="note-list">
           <li><strong>Ground truth is simulated.</strong> The dashed coral line is the reef the
@@ -860,9 +943,11 @@
           <li><strong>Loop state = CoralWatch health index.</strong> Only CWCHI is carried
             between ticks. The five probe parameters are measured fresh every tick and are not
             part of the corrected state.</li>
-          <li><strong>Hard write, not Kalman.</strong> Each button press writes the diver's
-            measured CWCHI into the state once. Nothing is corrected automatically; replacing
-            this with a real Kalman filter is the next version.</li>
+          <li><strong>Two correction algorithms.</strong> The Kalman filter fuses each diver
+            measurement with the LightGBM prediction using gain K = P/(P+R): uncertainty P grows
+            while the loop runs on its own and shrinks after every measurement. The hard write is
+            the v1 behaviour — it sets state := measured CWCHI and fully trusts the diver. Nothing
+            is corrected automatically.</li>
         </ul>
         <div id="model-meta" class="model-meta">Model: LightGBM · loading…</div>
       </section>
@@ -900,11 +985,11 @@
             <span id="stat-error" class="stat-value">—</span>
           </div>
           <div class="stat">
-            <span class="stat-label">Mean |error| since write</span>
+            <span class="stat-label">Mean |error| since correction</span>
             <span id="stat-mae" class="stat-value">—</span>
           </div>
           <div class="stat">
-            <span class="stat-label">Hard writes</span>
+            <span class="stat-label">Corrections</span>
             <span id="stat-writes" class="stat-value">0</span>
           </div>
         </div>
@@ -913,23 +998,31 @@
       <section id="correction-card" class="card correction-card">
         <div class="card-head">
           <h2>Correction</h2>
-          <span class="tag amber">v1 · replaces Kalman</span>
+          <span class="tag amber">v2 · choose algorithm</span>
         </div>
+
+        <span id="algorithm-label" class="field-label">Correction algorithm</span>
+        <div class="algorithm-switch" role="group" aria-labelledby="algorithm-label">
+          <button type="button" class="algo-btn" data-algorithm="kalman" aria-pressed="true">Kalman filter</button>
+          <button type="button" class="algo-btn" data-algorithm="hard" aria-pressed="false">Hard write</button>
+        </div>
+        <p id="algorithm-note" class="algorithm-note">—</p>
+
         <label class="field-label" for="measured-input">Diver measured CWCHI (manual input)</label>
         <div class="measured-row">
           <input id="measured-input" class="measured-input" type="number" min="0" max="6" step="0.01" value="3.00" inputmode="decimal" aria-label="Diver measured CWCHI">
-          <button id="sample-btn" class="sample-btn" type="button" title="Simulation helper: sample the simulated reef with measurement noise">Sample diver read</button>
+          <button id="sample-btn" class="sample-btn" type="button" aria-pressed="false" title="Toggle live diver readings: when on, the measured CWCHI follows the current simulated diver check every tick; type a value to switch back to manual">Use live diver read</button>
         </div>
-        <button id="hardwrite-btn" class="hardwrite-btn" type="button">Hard-write state ← measured CWCHI</button>
-        <p class="correction-hint">
-          Pressing this sets <strong>state := measured CWCHI</strong> once. The loop is not paused:
-          if you don't press it, predictions keep feeding forward and the state can drift from the
-          reef — which is exactly what the periodic diver checks are meant to catch.
-        </p>
+        <p id="diver-mode-note" class="diver-mode-note">Manual mode: corrections use the value above. Enable live diver read to follow the current simulated diver reading automatically.</p>
+        <button id="hardwrite-btn" class="hardwrite-btn" type="button" data-algorithm="kalman">Apply Kalman update</button>
+        <p id="correction-hint" class="correction-hint">—</p>
         <div class="correction-meta">
-          <div class="row"><span>Last hard write</span><span id="meta-correction" class="val">none yet</span></div>
+          <div class="row"><span>Last correction</span><span id="meta-correction" class="val">none yet</span></div>
           <div class="row"><span>Open-loop for</span><span id="meta-age" class="val">0 ticks</span></div>
-          <div class="row"><span>Diver check source</span><span class="val">manual (0–6)</span></div>
+          <div class="row"><span>State uncertainty</span><span id="meta-sigma" class="val">—</span></div>
+          <div class="row"><span>Kalman gain K (if measured now)</span><span id="meta-gain" class="val">—</span></div>
+          <div class="row"><span>Noise model σ<sub>model</sub> / σ<sub>diver</sub></span><span id="meta-noise" class="val">—</span></div>
+          <div class="row"><span>Diver check source</span><span id="meta-source" class="val">manual (0–6)</span></div>
         </div>
         <div id="correction-error" class="correction-error" role="status" aria-live="polite"></div>
       </section>
@@ -985,6 +1078,31 @@
     { label: "Nitrate" },
   ];
 
+  const ALGORITHM_COPY = {
+    kalman: {
+      label: "Kalman filter",
+      button: "Apply Kalman update",
+      note:
+        "1-D Kalman filter: <strong>state ← prediction + K·(measured − prediction)</strong>, " +
+        "with K = P/(P+R). Uncertainty P grows while the loop predicts and shrinks after each measurement.",
+      hint:
+        "Pressing this fuses the diver's measured CWCHI with the current prediction once. " +
+        "The gain K comes from the accumulated state uncertainty P, so the same measurement moves " +
+        "the state more after a long open-loop stretch. The loop keeps running.",
+    },
+    hard: {
+      label: "Hard write",
+      button: "Hard-write state ← measured CWCHI",
+      note:
+        "v1 behaviour: <strong>state := measured CWCHI</strong>. Full trust in the diver; " +
+        "the Kalman uncertainty is reset to the measurement noise.",
+      hint:
+        "Pressing this overwrites the loop state with the measured CWCHI once. The loop is not " +
+        "paused: if you don't press it, predictions keep feeding forward and the state can drift " +
+        "from the reef — which is exactly what the periodic diver checks are meant to catch.",
+    },
+  };
+
   const els = {
     liveDot: document.getElementById("live-dot"),
     loopStatus: document.getElementById("loop-status"),
@@ -1011,6 +1129,16 @@
     correctionError: document.getElementById("correction-error"),
     metaCorrection: document.getElementById("meta-correction"),
     metaAge: document.getElementById("meta-age"),
+    metaSigma: document.getElementById("meta-sigma"),
+    metaGain: document.getElementById("meta-gain"),
+    metaNoise: document.getElementById("meta-noise"),
+    metaSource: document.getElementById("meta-source"),
+    diverModeNote: document.getElementById("diver-mode-note"),
+    algorithmStatus: document.getElementById("algorithm-status"),
+    algorithmNote: document.getElementById("algorithm-note"),
+    correctionHint: document.getElementById("correction-hint"),
+    algorithmButtons: Array.from(document.querySelectorAll(".algo-btn")),
+    pipeAlgorithm: document.getElementById("pipe-algorithm"),
     eventList: document.getElementById("event-list"),
     modelMeta: document.getElementById("model-meta"),
     connError: document.getElementById("conn-error"),
@@ -1029,6 +1157,7 @@
     snapshot: null,
     lastTick: -1,
     lastCorrections: -1,
+    liveDiver: false,
     pollTimer: null,
     sensorNodes: new Map(),
   };
@@ -1105,7 +1234,7 @@
 
       const reading = document.createElementNS(namespace, "text");
       reading.setAttribute("class", "pipeline-reading");
-      reading.setAttribute("x", "320");
+      reading.setAttribute("x", "304");
       reading.setAttribute("y", String(y + 22));
       reading.setAttribute("text-anchor", "end");
       reading.textContent = "—";
@@ -1155,6 +1284,26 @@
     els.toggleBtn.textContent = running ? "Pause" : "Resume";
     const speed = String(snapshot.speed);
     if (els.speedSelect.value !== speed) els.speedSelect.value = speed;
+    els.algorithmStatus.textContent =
+      snapshot.algorithm_label || (ALGORITHM_COPY[snapshot.algorithm] || ALGORITHM_COPY.kalman).label;
+  }
+
+  function renderAlgorithmControl(snapshot) {
+    const algorithm = snapshot.algorithm === "hard" ? "hard" : "kalman";
+    const copy = ALGORITHM_COPY[algorithm];
+
+    els.algorithmButtons.forEach((button) => {
+      const active = button.dataset.algorithm === algorithm;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+
+    els.algorithmNote.innerHTML = copy.note;
+    els.correctionHint.innerHTML = copy.hint;
+    els.hardwriteBtn.dataset.algorithm = algorithm;
+    if (!els.hardwriteBtn.disabled) {
+      els.hardwriteBtn.textContent = copy.button;
+    }
   }
 
   function renderState(snapshot) {
@@ -1172,18 +1321,30 @@
     els.marker.style.left = `${(ratio * 100).toFixed(2)}%`;
 
     let source = "";
-    if (state.source === "measurement") {
+    els.sourceLine.classList.remove("measurement", "kalman");
+    if (state.source === "kalman") {
+      const last = snapshot.last_correction;
+      source = last
+        ? `<strong>Kalman update</strong> at tick ${last.tick}: measured ${fmt(last.measured, 2)} blended with the prediction ${fmt(last.before, 2)} → <strong>state ${fmt(last.after, 2)}</strong> (K = ${fmt(last.gain, 2)}).`
+        : "<strong>Fused by the Kalman filter.</strong>";
+      els.sourceLine.classList.add("kalman");
+    } else if (state.source === "measurement") {
       const last = snapshot.last_correction;
       source = last
         ? `<strong>Hard-set from the diver's measured CWCHI</strong> at tick ${last.tick}: state <strong>${fmt(last.before, 2)} → ${fmt(last.measured, 2)}</strong>. The next tick's prediction carries on from this written state.`
         : "<strong>Hard-set from the diver's measured CWCHI.</strong>";
       els.sourceLine.classList.add("measurement");
     } else if (state.source === "init") {
-      source = `<strong>Initialised from the first diver transect</strong> — the loop has not needed a hard write yet.`;
-      els.sourceLine.classList.remove("measurement");
+      source = `<strong>Initialised from the first diver transect</strong> — the loop has not needed a correction yet.`;
     } else {
-      source = `<strong>Carried by the last LightGBM prediction</strong> (tick ${snapshot.tick}). The loop is open-loop since the last hard write — no measurement has been written into the state.`;
-      els.sourceLine.classList.remove("measurement");
+      const last = snapshot.last_correction;
+      let lastText = "";
+      if (last && last.algorithm === "kalman") {
+        lastText = ` Last correction: Kalman update at tick ${last.tick} (K = ${fmt(last.gain, 2)}, measured ${fmt(last.measured, 2)} → ${fmt(last.after, 2)}).`;
+      } else if (last) {
+        lastText = ` Last correction: hard write at tick ${last.tick} (measured ${fmt(last.measured, 2)}).`;
+      }
+      source = `<strong>Carried by the last LightGBM prediction</strong> (tick ${snapshot.tick}). The loop is open-loop since the last correction.${lastText}`;
     }
     els.sourceLine.innerHTML = source;
 
@@ -1217,17 +1378,25 @@
     const state = snapshot.state || {};
     els.pipePred.textContent = snapshot.last_prediction == null ? "pred —" : `pred ${fmt(snapshot.last_prediction, 2)}`;
     els.pipeOutput.textContent = `${fmt(state.cwchi, 2)} / 6`;
+    const label = snapshot.algorithm_label || (ALGORITHM_COPY[snapshot.algorithm] || ALGORITHM_COPY.kalman).label;
+    els.pipeAlgorithm.textContent = `algorithm: ${label}`;
     const last = snapshot.last_correction;
-    els.pipeCorrection.textContent = last
-      ? `last write: ${fmt(last.measured, 2)} · tick ${last.tick}`
-      : "no write yet · loop is open-loop";
+    if (!last) {
+      els.pipeCorrection.textContent = "no correction yet · loop is open-loop";
+    } else if (last.algorithm === "kalman") {
+      els.pipeCorrection.textContent = `K=${fmt(last.gain, 2)} · measured ${fmt(last.measured, 2)} · tick ${last.tick}`;
+    } else {
+      els.pipeCorrection.textContent = `hard write ${fmt(last.measured, 2)} · tick ${last.tick}`;
+    }
   }
 
   function renderCorrection(snapshot) {
     const state = snapshot.state || {};
+    const kalman = snapshot.kalman || {};
     const last = snapshot.last_correction;
     if (last) {
-      els.metaCorrection.textContent = `tick ${last.tick} · ${fmt(last.measured, 2)} (was ${fmt(last.before, 2)})`;
+      const detail = last.algorithm === "kalman" ? `K ${fmt(last.gain, 2)}` : "hard";
+      els.metaCorrection.textContent = `tick ${last.tick} · ${detail} · ${fmt(last.measured, 2)} (was ${fmt(last.before, 2)})`;
     } else {
       els.metaCorrection.textContent = "none yet";
     }
@@ -1235,6 +1404,21 @@
     const age = Number(state.ticks_since_correction ?? 0);
     els.metaAge.textContent = `${age} tick${age === 1 ? "" : "s"}`;
     els.metaAge.classList.toggle("warn", age > 120);
+
+    const sigma = Number(state.sigma);
+    els.metaSigma.textContent = Number.isFinite(sigma) ? `σ ${fmt(sigma, 2)} (±2σ ${fmt(sigma * 2, 2)})` : "—";
+
+    if (snapshot.algorithm === "kalman" && Number.isFinite(Number(kalman.current_gain))) {
+      els.metaGain.textContent = fmt(kalman.current_gain, 2);
+    } else {
+      els.metaGain.textContent = "1.00 (hard write)";
+    }
+
+    if (Number.isFinite(Number(kalman.process_sigma)) && Number.isFinite(Number(kalman.measurement_sigma))) {
+      els.metaNoise.textContent = `σ ${fmt(kalman.process_sigma, 2)} / ${fmt(kalman.measurement_sigma, 2)}`;
+    } else {
+      els.metaNoise.textContent = "—";
+    }
   }
 
   function renderEvents(snapshot) {
@@ -1346,6 +1530,29 @@
       ctx.fillText(String(tick), x, padding.top + plotHeight + 8);
     }
 
+    // Kalman state-uncertainty band (±2 sigma)
+    if (windowed.some((point) => Number.isFinite(Number(point.sigma)))) {
+      ctx.beginPath();
+      windowed.forEach((point, index) => {
+        const sigma = Number(point.sigma) || 0;
+        const x = xFor(index);
+        const y = yFor(clamp(Number(point.state) + sigma, HEALTH_MIN, HEALTH_MAX));
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      for (let index = windowed.length - 1; index >= 0; index -= 1) {
+        const point = windowed[index];
+        const sigma = Number(point.sigma) || 0;
+        ctx.lineTo(xFor(index), yFor(clamp(Number(point.state) - sigma, HEALTH_MIN, HEALTH_MAX)));
+      }
+      ctx.closePath();
+      const bandGradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + plotHeight);
+      bandGradient.addColorStop(0, "rgba(45,212,191,0.09)");
+      bandGradient.addColorStop(1, "rgba(45,212,191,0.025)");
+      ctx.fillStyle = bandGradient;
+      ctx.fill();
+    }
+
     // Error band between truth and state
     ctx.beginPath();
     windowed.forEach((point, index) => {
@@ -1412,11 +1619,17 @@
       ctx.stroke();
       ctx.restore();
 
+      const kalmanCorrection = point.algorithm === "kalman";
+      const markerColor = point.init ? "#ffd166" : kalmanCorrection ? "#7ef4dc" : "#ffffff";
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = point.init ? "#ffd166" : "#ffffff";
-      ctx.shadowColor = point.init ? "rgba(255,209,102,0.8)" : "rgba(255,255,255,0.8)";
+      ctx.fillStyle = markerColor;
+      ctx.shadowColor = point.init
+        ? "rgba(255,209,102,0.8)"
+        : kalmanCorrection
+          ? "rgba(126,244,220,0.8)"
+          : "rgba(255,255,255,0.8)";
       ctx.shadowBlur = 8;
       ctx.fillRect(-3, -3, 6, 6);
       ctx.restore();
@@ -1453,11 +1666,16 @@
     renderStatus(snapshot);
     renderState(snapshot);
     renderSensors(snapshot);
+    renderAlgorithmControl(snapshot);
     renderPipeline(snapshot);
     renderCorrection(snapshot);
     renderEvents(snapshot);
     renderModel(snapshot.model);
     drawChart(snapshot);
+
+    if (app.liveDiver && Number.isFinite(Number(snapshot.diver_reading))) {
+      els.measuredInput.value = Number(snapshot.diver_reading).toFixed(2);
+    }
 
     if (app.lastTick !== snapshot.tick) {
       if (app.lastTick >= 0) {
@@ -1542,18 +1760,39 @@
     }
   }
 
-  async function sampleDiverReading() {
-    els.sampleBtn.disabled = true;
+  async function setAlgorithm(algorithm) {
+    if (!app.snapshot || app.snapshot.algorithm === algorithm) return;
+    els.algorithmButtons.forEach((button) => { button.disabled = true; });
     try {
-      const sample = await api("/api/diver-sample?noise=0.12");
-      els.measuredInput.value = Number(sample.measured).toFixed(2);
-      restartAnimation(els.stageDiver, "stage-active", 650);
-      els.correctionError.textContent = "";
+      const snapshot = await postJSON("/api/control", { algorithm });
+      render(snapshot);
+      restartAnimation(els.stageCorrection, "stage-active", 650);
     } catch (error) {
-      els.correctionError.textContent = `Could not sample the simulated reef: ${error.message}`;
+      els.correctionError.textContent = `Could not switch algorithm: ${error.message}`;
     } finally {
-      els.sampleBtn.disabled = false;
+      els.algorithmButtons.forEach((button) => { button.disabled = false; });
     }
+  }
+
+  function updateDiverModeUI() {
+    const live = app.liveDiver;
+    els.sampleBtn.classList.toggle("is-active", live);
+    els.sampleBtn.setAttribute("aria-pressed", String(live));
+    els.sampleBtn.textContent = live ? "Live mode ON" : "Use live diver read";
+    els.metaSource.textContent = live ? "live (auto)" : "manual (0–6)";
+    els.diverModeNote.textContent = live
+      ? "Live mode: the measured value follows the simulated diver reading every tick. Type a new value to switch back to manual."
+      : "Manual mode: corrections use the value above. Enable live diver read to follow the current simulated diver reading automatically.";
+  }
+
+  function toggleLiveDiver() {
+    app.liveDiver = !app.liveDiver;
+    if (app.liveDiver && app.snapshot && Number.isFinite(Number(app.snapshot.diver_reading))) {
+      els.measuredInput.value = Number(app.snapshot.diver_reading).toFixed(2);
+      restartAnimation(els.stageDiver, "stage-active", 650);
+    }
+    els.correctionError.textContent = "";
+    updateDiverModeUI();
   }
 
   async function hardWrite() {
@@ -1568,18 +1807,17 @@
     }
     els.correctionError.textContent = "";
     els.hardwriteBtn.disabled = true;
-    els.hardwriteBtn.textContent = "Writing measured state…";
+    els.hardwriteBtn.textContent = "Applying correction…";
     try {
       const snapshot = await postJSON("/api/correct", { measured: raw });
       render(snapshot);
-      els.measuredInput.value = Number(snapshot.state.cwchi).toFixed(2);
       restartAnimation(els.correctionCard, "flash", 900);
       restartAnimation(els.stageCorrection, "stage-active", 900);
     } catch (error) {
       els.correctionError.textContent = `Hard write failed: ${error.message}`;
     } finally {
       els.hardwriteBtn.disabled = false;
-      els.hardwriteBtn.textContent = "Hard-write state ← measured CWCHI";
+      if (app.snapshot) renderAlgorithmControl(app.snapshot);
     }
   }
 
@@ -1594,8 +1832,17 @@
     els.toggleBtn.addEventListener("click", toggleLoop);
     els.resetBtn.addEventListener("click", resetLoop);
     els.speedSelect.addEventListener("change", changeSpeed);
-    els.sampleBtn.addEventListener("click", sampleDiverReading);
+    els.sampleBtn.addEventListener("click", toggleLiveDiver);
     els.hardwriteBtn.addEventListener("click", hardWrite);
+    els.algorithmButtons.forEach((button) => {
+      button.addEventListener("click", () => setAlgorithm(button.dataset.algorithm));
+    });
+    els.measuredInput.addEventListener("input", () => {
+      if (app.liveDiver) {
+        app.liveDiver = false;
+        updateDiverModeUI();
+      }
+    });
     els.measuredInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") hardWrite();
     });
@@ -1604,6 +1851,7 @@
       if (app.snapshot) drawChart(app.snapshot);
     });
 
+    updateDiverModeUI();
     poll();
   }
 

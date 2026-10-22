@@ -19,16 +19,26 @@ What the loop does, tick after tick:
   measured probe values plus the loop-carried health index and predicts the
   next daily CoralWatch health index (CWCHI, 0-6).
 * **Output** - the predicted CWCHI becomes the new loop state.
-* **Correction** - instead of a Kalman filter (future work), this demo does a
-  **hard write**: the diver's manually typed CWCHI measurement is written
-  straight into the loop state.  It is *not* applied automatically: the loop
-  keeps running on predictions until the user presses the button.
+* **Correction** - the diver's manually typed CWCHI measurement can be fused
+  with the loop state using one of two selectable algorithms:
+
+  1. **Kalman filter** (default) - a 1-D Kalman filter over the CWCHI state:
+     the LightGBM prediction is the process model, and each measurement is
+     fused with gain ``K = P / (P + R)``.  The uncertainty ``P`` grows between
+     measurements and shrinks on each update, so repeated diver checks give a
+     smooth, uncertainty-aware correction instead of a hard jump.
+  2. **Hard write** - the v1 behaviour: ``state := measured CWCHI``.
+
+  Neither is automatic: the loop keeps running on predictions until the user
+  presses the correction button.  The algorithm can be switched live via the
+  page (or ``POST /api/control {"algorithm": "kalman" | "hard"}``).
 
 Endpoints
 ---------
 ``GET  /api/state``          snapshot: loop state, sensors, history, events
 ``POST /api/correct``        ``{"measured": 3.42}`` hard-set state <- measured
-``POST /api/control``        ``{"running": true, "speed": 1.5, "reset": false}``
+``POST /api/control``        ``{"running": true, "speed": 1.5, "reset": false,
+                             "algorithm": "kalman"}``
 ``GET  /api/diver-sample``   helper for the demo: simulated diver reading
 
 Run it from the repository root with the project virtualenv::
@@ -119,6 +129,19 @@ FEATURES = [
 ]
 
 TARGET_LABEL = "CoralWatch health index (CWCHI)"
+
+# Correction algorithms.  Both consume the diver's measured CWCHI when the user
+# presses the correction button; they differ in how it is fused with the loop
+# state.
+#   * "kalman" - 1-D Kalman filter: the LightGBM prediction is the process
+#                model; the measurement update uses gain K = P / (P + R).
+#   * "hard"   - v1 behaviour: state := measured CWCHI (full trust in diver).
+ALGORITHMS = ("kalman", "hard")
+ALGORITHM_LABELS = {"kalman": "Kalman filter", "hard": "Hard write"}
+DEFAULT_ALGORITHM = "kalman"
+DEFAULT_PROCESS_SIGMA = 0.05      # std of daily model/prediction drift (CWCHI)
+DEFAULT_MEASUREMENT_SIGMA = 0.20  # std of the diver's CWCHI measurement
+DEFAULT_DIVER_NOISE = 0.12        # std of the demo's simulated diver reading
 
 # Smoothness of the simulated reef.  The latent reef condition is a very slow
 # AR(1) process and the probes only carry gentle noise, so consecutive loop
@@ -269,9 +292,10 @@ class LoopSim:
     """Background simulation of the measurement -> prediction -> correction loop.
 
     The only loop-carried *state* is the CoralWatch health index; the five probe
-    parameters are fresh measurements every tick.  A correction (hard write)
-    overwrites that state with the diver's measured value; the loop otherwise
-    keeps feeding predictions forward.
+    parameters are fresh measurements every tick.  Corrections fuse the diver's
+    measured value into that state using the selected algorithm (a 1-D Kalman
+    filter by default, or a hard write); the loop otherwise keeps feeding
+    predictions forward.
     """
 
     HISTORY_LIMIT = 1200
@@ -284,13 +308,21 @@ class LoopSim:
         sensor_ranges: dict[str, tuple[float, float]],
         metrics: dict[str, object] | None,
         interval: float = 1.0,
+        algorithm: str = DEFAULT_ALGORITHM,
+        process_sigma: float = DEFAULT_PROCESS_SIGMA,
+        measurement_sigma: float = DEFAULT_MEASUREMENT_SIGMA,
     ) -> None:
+        if algorithm not in ALGORITHMS:
+            raise ValueError(f"unknown correction algorithm: {algorithm!r}")
         self._model = model
         self._frames = frames
         self._sensor_ranges = sensor_ranges
         self._metrics = metrics
         self._lock = threading.RLock()
         self._base_interval = max(0.15, float(interval))
+        self._algorithm = algorithm
+        self._process_var = max(0.0, float(process_sigma)) ** 2
+        self._measurement_var = max(1e-6, float(measurement_sigma)) ** 2
 
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="coral-loop", daemon=True)
@@ -328,12 +360,17 @@ class LoopSim:
         self._ticks_since_correction = 0
         self._error_sum = 0.0
         self._error_count = 0
+        self._variance = self._measurement_var
+        self._last_gain: float | None = None
+        self._diver_reading_tick: int | None = None
+        self._diver_reading: float | None = None
         self._history: deque[dict[str, object]] = deque(maxlen=self.HISTORY_LIMIT)
         self._history.append(
             {
                 "t": 0,
                 "state": self._state,
                 "true": _round(self._true_health, 3),
+                "sigma": _round(math.sqrt(self._variance), 3),
                 "corrected": False,
                 "init": True,
             }
@@ -382,6 +419,8 @@ class LoopSim:
                 self._ticks_since_correction = 0
                 self._error_sum = 0.0
                 self._error_count = 0
+                self._variance = self._measurement_var
+                self._last_gain = None
                 self._events.append(
                     {
                         "tick": tick,
@@ -400,6 +439,9 @@ class LoopSim:
                 state = _round(prediction, 3)
                 self._source = "prediction"
                 self._last_prediction = state
+                # The process model is uncertain: uncertainty grows every tick
+                # until the next diver measurement.
+                self._variance += self._process_var
                 corrected = False
                 init = False
 
@@ -416,10 +458,26 @@ class LoopSim:
                     "t": tick,
                     "state": state,
                     "true": _round(following.true_health, 3),
+                    "sigma": _round(math.sqrt(self._variance), 3),
                     "corrected": corrected,
                     "init": init,
                 }
             )
+
+    def _current_diver_reading(self) -> float:
+        """Noisy diver reading for the current tick.
+
+        Cached per tick so that the page's live "use current reading" mode shows a
+        stable value between loop steps instead of re-rolling the noise on every
+        poll.
+        """
+        if self._diver_reading is None or self._diver_reading_tick != self._tick:
+            reading = _clamp_health(
+                self._true_health + random.gauss(0.0, DEFAULT_DIVER_NOISE)
+            )
+            self._diver_reading = _round(reading, 2)
+            self._diver_reading_tick = self._tick
+        return self._diver_reading
 
     # -- public API -------------------------------------------------------- #
 
@@ -450,13 +508,26 @@ class LoopSim:
                 "site": frame.site + 1,
                 "sites": self._sites,
                 "day": frame.day + 1,
+                "algorithm": self._algorithm,
+                "algorithm_label": ALGORITHM_LABELS[self._algorithm],
                 "state": {
                     "cwchi": self._state,
                     "source": self._source,
                     "ticks_since_correction": self._ticks_since_correction,
                     "corrections": self._corrections,
+                    "sigma": _round(math.sqrt(self._variance), 3),
+                },
+                "kalman": {
+                    "process_sigma": _round(math.sqrt(self._process_var), 3),
+                    "measurement_sigma": _round(math.sqrt(self._measurement_var), 3),
+                    "state_sigma": _round(math.sqrt(self._variance), 3),
+                    "current_gain": _round(
+                        self._variance / (self._variance + self._measurement_var), 3
+                    ),
+                    "last_gain": _round(self._last_gain, 3) if self._last_gain is not None else None,
                 },
                 "last_prediction": self._last_prediction,
+                "diver_reading": self._current_diver_reading(),
                 "true_health": _round(self._true_health, 3),
                 "error": _round(error, 3),
                 "mean_abs_error": _round(mean_abs_error, 3) if mean_abs_error is not None else None,
@@ -471,31 +542,66 @@ class LoopSim:
             }
 
     def correct(self, measured: float) -> dict[str, object]:
-        """Hard write: loop state <- diver's measured CWCHI (no Kalman yet)."""
+        """Fuse the diver's measured CWCHI into the loop state.
+
+        Uses the currently selected algorithm: a 1-D Kalman update (default) or
+        a v1 hard write.
+        """
         with self._lock:
             before = self._state
-            state = _round(_clamp_health(float(measured)), 3)
+            measurement = _round(_clamp_health(float(measured)), 3)
+
+            if self._algorithm == "hard":
+                state = measurement
+                self._variance = self._measurement_var
+                gain = 1.0
+                self._source = "measurement"
+                event_text = (
+                    f"Hard write - state set to measured CWCHI {measurement:.2f} "
+                    f"(was {before:.2f})"
+                )
+            else:
+                prior = before
+                prior_var = self._variance
+                denominator = prior_var + self._measurement_var
+                gain = prior_var / denominator if denominator > 0 else 1.0
+                state = _round(prior + gain * (measurement - prior), 3)
+                self._variance = (1.0 - gain) * prior_var
+                self._last_gain = gain
+                self._source = "kalman"
+                event_text = (
+                    f"Kalman update - measured {measurement:.2f}, K={gain:.2f}, "
+                    f"state {prior:.2f} -> {state:.2f}"
+                )
+
             self._state = state
-            self._source = "measurement"
             self._corrections += 1
             self._last_correction = {
                 "tick": self._tick,
-                "measured": state,
+                "measured": measurement,
                 "before": before,
+                "after": state,
+                "algorithm": self._algorithm,
+                "gain": _round(gain, 3),
             }
             self._ticks_since_correction = 0
             self._error_sum = 0.0
             self._error_count = 0
+            sigma = _round(math.sqrt(self._variance), 3)
             if self._history and self._history[-1]["t"] == self._tick:
                 self._history[-1]["state"] = state
+                self._history[-1]["sigma"] = sigma
                 self._history[-1]["corrected"] = True
+                self._history[-1]["algorithm"] = self._algorithm
             else:
                 self._history.append(
                     {
                         "t": self._tick,
                         "state": state,
                         "true": _round(self._true_health, 3),
+                        "sigma": sigma,
                         "corrected": True,
+                        "algorithm": self._algorithm,
                         "init": False,
                     }
                 )
@@ -503,7 +609,7 @@ class LoopSim:
                 {
                     "tick": self._tick,
                     "kind": "correction",
-                    "text": f"Hard write - state set to measured CWCHI {state:.2f} (was {before:.2f})",
+                    "text": event_text,
                 }
             )
             return self.snapshot()
@@ -513,6 +619,7 @@ class LoopSim:
         running: bool | None = None,
         speed: float | None = None,
         reset: bool = False,
+        algorithm: str | None = None,
     ) -> dict[str, object]:
         with self._lock:
             if reset:
@@ -521,6 +628,21 @@ class LoopSim:
             if speed is not None:
                 self._speed = min(8.0, max(0.25, float(speed)))
                 self._interval = self._base_interval / self._speed
+            if algorithm is not None:
+                candidate = str(algorithm).lower()
+                if candidate not in ALGORITHMS:
+                    raise ValueError(
+                        f"unknown algorithm {algorithm!r}; expected one of {ALGORITHMS}"
+                    )
+                if candidate != self._algorithm:
+                    self._algorithm = candidate
+                    self._events.append(
+                        {
+                            "tick": self._tick,
+                            "kind": "control",
+                            "text": f"Correction algorithm -> {ALGORITHM_LABELS[candidate]}",
+                        }
+                    )
             if running is not None and bool(running) != self._running:
                 self._running = bool(running)
                 self._next_at = time.monotonic()
@@ -545,7 +667,7 @@ class LoopSim:
 # --------------------------------------------------------------------------- #
 
 class LoopHandler(SimpleHTTPRequestHandler):
-    server_version = "CoralLoopDemo/1.0"
+    server_version = "CoralLoopDemo/2.0"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB_DIR), **kwargs)
@@ -641,10 +763,15 @@ class LoopHandler(SimpleHTTPRequestHandler):
                 running = self._boolean(payload, "running")
                 speed = self._number(payload, "speed", required=False)
                 reset = self._boolean(payload, "reset") or False
+                algorithm = payload.get("algorithm")
+                if algorithm is not None and not isinstance(algorithm, str):
+                    raise ValueError("algorithm must be a string")
+                snapshot = loop_sim.control(
+                    running=running, speed=speed, reset=reset, algorithm=algorithm
+                )
             except ValueError as exc:
                 self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
                 return
-            snapshot = loop_sim.control(running=running, speed=speed, reset=reset)
             self._send_json({"ok": True, **snapshot})
             return
 
@@ -706,6 +833,30 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--algorithm",
+        choices=list(ALGORITHMS),
+        default=DEFAULT_ALGORITHM,
+        help=f"initial correction algorithm (default: {DEFAULT_ALGORITHM})",
+    )
+    parser.add_argument(
+        "--process-noise",
+        type=float,
+        default=DEFAULT_PROCESS_SIGMA,
+        help=(
+            "std of the daily CWCHI process/model uncertainty used by the Kalman "
+            f"filter (default: {DEFAULT_PROCESS_SIGMA})"
+        ),
+    )
+    parser.add_argument(
+        "--measurement-noise",
+        type=float,
+        default=DEFAULT_MEASUREMENT_SIGMA,
+        help=(
+            "std of the diver's CWCHI measurement used by the Kalman filter "
+            f"(default: {DEFAULT_MEASUREMENT_SIGMA})"
+        ),
+    )
+    parser.add_argument(
         "--interval",
         type=float,
         default=1.0,
@@ -722,6 +873,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--condition-phi must be in (0, 1)")
     if args.noise_scale < 0.0:
         parser.error("--noise-scale must be >= 0")
+    if args.process_noise < 0.0:
+        parser.error("--process-noise must be >= 0")
+    if args.measurement_noise <= 0.0:
+        parser.error("--measurement-noise must be > 0")
 
     print(f"[loop] loading model: {args.model}")
     model = load_model(args.model)
@@ -745,7 +900,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         for index, feature in enumerate(FEATURES)
     }
-    loop_sim = LoopSim(model, frames, sensor_ranges, metrics, interval=args.interval)
+    loop_sim = LoopSim(
+        model,
+        frames,
+        sensor_ranges,
+        metrics,
+        interval=args.interval,
+        algorithm=args.algorithm,
+        process_sigma=args.process_noise,
+        measurement_sigma=args.measurement_noise,
+    )
     loop_sim.start()
 
     url = f"http://{args.host}:{args.port}/"
@@ -759,6 +923,10 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"model: {args.model} ({model.num_trees()} trees) · "
         f"{len(frames)} simulated days · {args.interval:.2f}s per day"
+    )
+    print(
+        f"correction algorithm: {ALGORITHM_LABELS[args.algorithm]} · "
+        f"Kalman sigma_process={args.process_noise} sigma_measure={args.measurement_noise}"
     )
     if metrics:
         print(f"training metrics: MAE={metrics['mae']}  R2={metrics['r2']}  rows={metrics['rows']}")
