@@ -39,41 +39,35 @@ DEFAULT_CSV = SERVER_DIR / "data" / "coral_health_training.csv"
 
 # Order must match the training CSV (the target is first there, then these).
 FEATURE_KEYS = [
-    "prev_dissolved_oxygen_mg_l",
-    "prev_ph",
     "prev_temperature_c",
-    "prev_zooxanthellae_million_cells_cm2",
+    "prev_ph",
     "prev_nitrate_umol_l",
+    "prev_par_umol_m2_s",
     "prev_coral_health_index",
 ]
 
 # Presentation metadata for the sliders.  Min/max/default are filled in from
 # the training CSV at startup when it is available.
 FEATURE_META = {
-    "prev_dissolved_oxygen_mg_l": {
-        "label": "Dissolved oxygen",
-        "unit": "mg/L", "decimals": 2, "step": 0.01,
-        "fallback": (3.0, 8.6, 6.0),
+    "prev_temperature_c": {
+        "label": "Temperature",
+        "unit": "°C", "decimals": 1, "step": 0.1,
+        "fallback": (24.0, 32.8, 28.4),
     },
     "prev_ph": {
         "label": "pH",
         "unit": "", "decimals": 3, "step": 0.001,
-        "fallback": (7.65, 8.24, 7.96),
-    },
-    "prev_temperature_c": {
-        "label": "Water temperature",
-        "unit": "°C", "decimals": 1, "step": 0.1,
-        "fallback": (24.1, 32.8, 28.4),
-    },
-    "prev_zooxanthellae_million_cells_cm2": {
-        "label": "Zooxanthellae density",
-        "unit": "million cells/cm²", "decimals": 2, "step": 0.01,
-        "fallback": (0.3, 4.1, 2.05),
+        "fallback": (7.65, 8.27, 7.96),
     },
     "prev_nitrate_umol_l": {
-        "label": "Nitrate",
+        "label": "Nitrate concentration",
         "unit": "µmol/L", "decimals": 2, "step": 0.01,
-        "fallback": (0.0, 8.0, 3.33),
+        "fallback": (0.15, 8.0, 3.38),
+    },
+    "prev_par_umol_m2_s": {
+        "label": "PAR",
+        "unit": "µmol m⁻² s⁻¹", "decimals": 0, "step": 1,
+        "fallback": (260, 690, 480),
     },
     "prev_coral_health_index": {
         "label": "Yesterday's health index",

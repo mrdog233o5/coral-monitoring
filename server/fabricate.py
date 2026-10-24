@@ -4,11 +4,10 @@
 The script simulates a set of reef sites that are measured every day by
 seabed sensors.  For each site and each day it records the daily averages of
 
-    * dissolved oxygen  (mg/L)
-    * pH
     * temperature       (deg C)
-    * zooxanthellae concentration (million cells / cm^2)
-    * nitrate           (umol/L)
+    * pH
+    * nitrate concentration (umol/L)
+    * PAR               (umol photons / m^2 / s)
     * coral health index (0 = fully bleached / dead, 6 = pristine reef)
 
 The generated training file has one row per simulated site/day, where the
@@ -24,14 +23,13 @@ almost perfectly evenly and a small model sees just as many low-health
 examples (0.x, 1.x, ...) as healthy ones.
 
 Site and date are simulation details only and are **not** written to the file.
-The CSV contains exactly the output followed by the six inputs, in this order:
+The CSV contains exactly the output followed by the five inputs, in this order:
 
     coral_health_index                    OUTPUT (today, 0-6, fractional)
-    prev_dissolved_oxygen_mg_l            input (yesterday)
-    prev_ph                               input (yesterday)
     prev_temperature_c                    input (yesterday)
-    prev_zooxanthellae_million_cells_cm2  input (yesterday)
+    prev_ph                               input (yesterday)
     prev_nitrate_umol_l                   input (yesterday)
+    prev_par_umol_m2_s                    input (yesterday)
     prev_coral_health_index               input (yesterday, 0-6)
 
 The file is plain CSV, so it can be loaded directly with
@@ -39,7 +37,7 @@ The file is plain CSV, so it can be loaded directly with
     import pandas as pd
     df = pd.read_csv("server/data/coral_health_training.csv")
     y = df.iloc[:, 0]          # target: coral_health_index
-    X = df.iloc[:, 1:]         # six input columns
+    X = df.iloc[:, 1:]         # five input columns
 
 or, for convenience, with ``load_training_data(path)`` from this module.
 
@@ -47,10 +45,11 @@ Health dynamics (why the index moves slowly)
 --------------------------------------------
 Each site has a slow-moving latent "reef condition" u(t) in [0, 1]: an
 autocorrelated Gaussian process mapped through the normal CDF and then
-rank-calibrated to be uniform over the dataset.  The five sensor readings are
+rank-calibrated to be uniform over the dataset.  The four sensor readings are
 noisy observations of the same-day condition.  As u falls (reef gets sicker)
-temperature and nitrate go up, while pH, dissolved oxygen and zooxanthellae
-density go down; the opposite happens as u rises.
+temperature, nitrate and PAR go up (water clears and the coral canopy thins, so
+more sunlight reaches the benthos), while pH goes down; the opposite happens as
+u rises.
 
 The health index is *not* recomputed from scratch every day: it has inertia.
 Today's index only moves a limited step toward the level implied by yesterday's
@@ -101,16 +100,15 @@ from typing import Iterable, Sequence
 # --------------------------------------------------------------------------- #
 
 FEATURE_COLUMNS = [
-    "prev_dissolved_oxygen_mg_l",
-    "prev_ph",
     "prev_temperature_c",
-    "prev_zooxanthellae_million_cells_cm2",
+    "prev_ph",
     "prev_nitrate_umol_l",
+    "prev_par_umol_m2_s",
     "prev_coral_health_index",
 ]
 
 TARGET_COLUMN = "coral_health_index"
-# The output (y) goes first, followed by the six inputs (X).
+# The output (y) goes first, followed by the five inputs (X).
 CSV_COLUMNS = [TARGET_COLUMN] + FEATURE_COLUMNS
 
 HEALTH_MIN = 0.0
@@ -130,11 +128,10 @@ DEFAULT_OUT = Path(__file__).resolve().parent / "data" / "coral_health_training.
 
 # Plausible bounds used by the self-check after writing the file.
 _BOUNDS = {
-    "prev_dissolved_oxygen_mg_l": (2.0, 10.0),
-    "prev_ph": (7.4, 8.6),
     "prev_temperature_c": (20.0, 36.0),
-    "prev_zooxanthellae_million_cells_cm2": (0.05, 6.0),
+    "prev_ph": (7.4, 8.6),
     "prev_nitrate_umol_l": (0.0, 8.0),
+    "prev_par_umol_m2_s": (50.0, 1200.0),
     "prev_coral_health_index": (HEALTH_MIN, HEALTH_MAX),
     TARGET_COLUMN: (HEALTH_MIN, HEALTH_MAX),
 }
@@ -186,9 +183,9 @@ class SiteProfile:
     base_temperature_c: float
     seasonal_amplitude_c: float
     base_ph: float
-    base_do_mg_l: float
     nitrate_baseline_umol_l: float
-    base_zoox_million_cells_cm2: float
+    base_par_umol_m2_s: float
+    seasonal_par_amplitude: float
     stress_sensitivity: float
     sensor_noise_scale: float
 
@@ -205,9 +202,9 @@ def make_profile(rng: random.Random, index: int) -> SiteProfile:
         base_temperature_c=rng.uniform(26.2, 27.9) + (0.5 if stressed else 0.0),
         seasonal_amplitude_c=rng.uniform(0.4, 0.9),
         base_ph=rng.uniform(7.98, 8.12) - (0.03 if stressed else 0.0),
-        base_do_mg_l=rng.uniform(6.2, 7.2) - (0.3 if stressed else 0.0),
         nitrate_baseline_umol_l=rng.uniform(0.15, 0.8) + (0.3 if stressed else 0.0),
-        base_zoox_million_cells_cm2=rng.uniform(2.2, 3.4) * (0.9 if stressed else 1.0),
+        base_par_umol_m2_s=rng.uniform(360.0, 460.0) + (20.0 if stressed else 0.0),
+        seasonal_par_amplitude=rng.uniform(50.0, 90.0),
         stress_sensitivity=rng.uniform(0.85, 1.15) * (1.08 if stressed else 1.0),
         sensor_noise_scale=rng.uniform(0.8, 1.2),
     )
@@ -256,30 +253,25 @@ def simulate_sensor_series(
             - 0.36 * stress
             + rng.gauss(0.0, 0.018 * noise_scale)
         )
-        dissolved_oxygen = (
-            profile.base_do_mg_l
-            + 1.20
-            - 3.60 * stress
-            + rng.gauss(0.0, 0.22 * noise_scale)
-        )
         nitrate = (
             profile.nitrate_baseline_umol_l
             + 0.12
             + 6.0 * stress**1.3
             + rng.gauss(0.0, 0.18 * noise_scale)
         )
-        zooxanthellae = (
-            profile.base_zoox_million_cells_cm2 * (1.18 - 0.85 * stress)
-            + rng.gauss(0.0, 0.08 * noise_scale)
+        par = (
+            profile.base_par_umol_m2_s
+            + profile.seasonal_par_amplitude * season
+            + 140.0 * stress
+            + rng.gauss(0.0, 28.0 * noise_scale)
         )
 
         sensors.append(
             {
-                "dissolved_oxygen_mg_l": _clip(dissolved_oxygen, 1.5, 11.0),
-                "ph": _clip(ph, 7.4, 8.5),
                 "temperature_c": _clip(temperature, 20.0, 36.0),
-                "zooxanthellae_million_cells_cm2": _clip(zooxanthellae, 0.05, 6.0),
+                "ph": _clip(ph, 7.4, 8.5),
                 "nitrate_umol_l": _clip(nitrate, 0.01, 8.0),
+                "par_umol_m2_s": _clip(par, 50.0, 1200.0),
             }
         )
     return sensors
@@ -356,13 +348,10 @@ def build_training_rows(
         rows.append(
             {
                 TARGET_COLUMN: _round(health[index]),
-                "prev_dissolved_oxygen_mg_l": _round(previous["dissolved_oxygen_mg_l"]),
-                "prev_ph": _round(previous["ph"]),
                 "prev_temperature_c": _round(previous["temperature_c"]),
-                "prev_zooxanthellae_million_cells_cm2": _round(
-                    previous["zooxanthellae_million_cells_cm2"]
-                ),
+                "prev_ph": _round(previous["ph"]),
                 "prev_nitrate_umol_l": _round(previous["nitrate_umol_l"]),
+                "prev_par_umol_m2_s": _round(previous["par_umol_m2_s"]),
                 "prev_coral_health_index": _round(health[index - 1]),
             }
         )
@@ -423,7 +412,7 @@ def validate_csv(path: Path, columns: Sequence[str], expected_rows: int) -> None
 def load_training_data(path: str | Path):
     """Load the generated CSV with pandas.
 
-    Returns ``(X, y)`` where ``X`` is the 6-feature DataFrame and ``y`` is the
+    Returns ``(X, y)`` where ``X`` is the 5-feature DataFrame and ``y`` is the
     target Series.
     """
     import pandas as pd  # imported lazily so data generation needs no pandas

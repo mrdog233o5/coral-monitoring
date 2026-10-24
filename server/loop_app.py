@@ -7,15 +7,16 @@ the lower half of the block diagram and runs the **entire loop** on simulated
 live data:
 
     Measurement  ->  Prediction  ->  Output  ->  Correction
-    (5 probes)       (LightGBM)      (CWCHI)      (hard write)
+    (4 probes)       (LightGBM)      (CWCHI)      (hard write)
          ^                                          |
          +----------- corrected state --------------+
 
 What the loop does, tick after tick:
 
-* **Measurement** - the five probe parameters are read from the simulated reef
-  (this demo fabricates a plausible reef trajectory with ``fabricate.py``).
-* **Prediction** - the trained LightGBM model (``model.txt``) takes the five
+* **Measurement** - the four probe parameters (temperature, pH, nitrate and
+  PAR) are read from the simulated reef (this demo fabricates a plausible reef
+  trajectory with ``fabricate.py``).
+* **Prediction** - the trained LightGBM model (``model.txt``) takes the four
   measured probe values plus the loop-carried health index and predicts the
   next daily CoralWatch health index (CWCHI, 0-6).
 * **Output** - the predicted CWCHI becomes the new loop state.
@@ -88,14 +89,15 @@ DEFAULT_CSV = SERVER_DIR / "data" / "coral_health_training.csv"
 HEALTH_MIN = 0.0
 HEALTH_MAX = 6.0
 
-# The five probe parameters, in the same order the model was trained on.
+# The four probe parameters, in the same order the model was trained on
+# (temperature, pH, nitrate, PAR, then the loop-carried health index).
 # ``sim_key`` is the key used by fabricate.simulate_sensor_series().
 FEATURES = [
     {
-        "key": "dissolved_oxygen",
-        "sim_key": "dissolved_oxygen_mg_l",
-        "label": "Dissolved oxygen",
-        "unit": "mg/L",
+        "key": "temperature",
+        "sim_key": "temperature_c",
+        "label": "Temperature",
+        "unit": "°C",
         "decimals": 2,
     },
     {
@@ -106,25 +108,18 @@ FEATURES = [
         "decimals": 3,
     },
     {
-        "key": "temperature",
-        "sim_key": "temperature_c",
-        "label": "Water temperature",
-        "unit": "°C",
-        "decimals": 2,
-    },
-    {
-        "key": "zooxanthellae",
-        "sim_key": "zooxanthellae_million_cells_cm2",
-        "label": "Zooxanthellae density",
-        "unit": "million cells/cm²",
-        "decimals": 2,
-    },
-    {
         "key": "nitrate",
         "sim_key": "nitrate_umol_l",
-        "label": "Nitrate",
+        "label": "Nitrate concentration",
         "unit": "µmol/L",
         "decimals": 2,
+    },
+    {
+        "key": "par",
+        "sim_key": "par_umol_m2_s",
+        "label": "PAR",
+        "unit": "µmol m⁻² s⁻¹",
+        "decimals": 0,
     },
 ]
 
@@ -262,11 +257,10 @@ def training_metrics(model: lgb.Booster, csv_path: Path) -> dict[str, object] | 
 
         frame = pd.read_csv(csv_path)
         feature_columns = [
-            "prev_dissolved_oxygen_mg_l",
-            "prev_ph",
             "prev_temperature_c",
-            "prev_zooxanthellae_million_cells_cm2",
+            "prev_ph",
             "prev_nitrate_umol_l",
+            "prev_par_umol_m2_s",
             "prev_coral_health_index",
         ]
         target = frame["coral_health_index"].to_numpy(dtype=float)
@@ -291,7 +285,7 @@ def training_metrics(model: lgb.Booster, csv_path: Path) -> dict[str, object] | 
 class LoopSim:
     """Background simulation of the measurement -> prediction -> correction loop.
 
-    The only loop-carried *state* is the CoralWatch health index; the five probe
+    The only loop-carried *state* is the CoralWatch health index; the four probe
     parameters are fresh measurements every tick.  Corrections fuse the diver's
     measured value into that state using the selected algorithm (a 1-D Kalman
     filter by default, or a hard write); the loop otherwise keeps feeding

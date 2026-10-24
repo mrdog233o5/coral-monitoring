@@ -4,7 +4,7 @@ A synthetic-data demo of the coral-reef monitoring loop from our project diagram
 
 ```
 Measurement  →  Prediction  →  Output  →  Correction
-(5 probes)      (LightGBM)     (CWCHI)     (Kalman / hard write)
+(4 probes)      (LightGBM)     (CWCHI)     (Kalman / hard write)
      ↑                                         │
      └────────── corrected state ──────────────┘
 ```
@@ -13,7 +13,7 @@ The repository contains **two separate web demos**:
 
 | Demo | Files | Port | What it shows |
 | --- | --- | --- | --- |
-| **Upper half (done earlier)** | `server/app.py`, `server/web/index.html` | 8000 | Sliders for yesterday's sensor readings → LightGBM predicts today's CoralWatch health index. Kept untouched as its own demo. |
+| **Upper half (done earlier)** | `server/app.py`, `server/web/index.html` | 8000 | Sliders for yesterday's sensor readings (temperature, pH, nitrate concentration, PAR) → LightGBM predicts today's CoralWatch health index. Kept untouched as its own demo. |
 | **Full loop (new)** | `server/loop_app.py`, `server/loop_web/index.html` | 8001 | The complete closed loop on simulated live sensors, including the Correction stage. |
 
 The correction stage supports **two selectable algorithms** (version 2):
@@ -70,10 +70,10 @@ Options:
 
 ### What happens each tick
 
-1. **Measurement** — the five simulated probes produce fresh readings
-   (dissolved oxygen, pH, temperature, zooxanthellae density, nitrate).
+1. **Measurement** — the four simulated probes produce fresh readings
+   (temperature, pH, nitrate concentration, PAR).
 2. **Prediction** — the trained LightGBM model (`server/model.txt`) takes those
-   five readings plus the loop-carried CWCHI state and predicts the next daily
+   four readings plus the loop-carried CWCHI state and predicts the next daily
    CWCHI.
 3. **Output** — the prediction becomes the new loop state (and is plotted live).
 4. **Correction** — only when the user presses the correction button, the diver's
@@ -114,9 +114,15 @@ Both servers can run at the same time.
 
 ## Data and model
 
+The model's four probe inputs are **temperature (°C)**, **pH**, **nitrate
+concentration (µmol/L)** and **PAR (µmol m⁻² s⁻¹)**; the fifth input is the
+previous day's CoralWatch health index (loop state, not a probe).
+
 * `server/fabricate.py` — generates the synthetic coral-reef dataset used for
-  training (`server/data/coral_health_training.csv`). The health index has
-  inertia: recovery is slow, decline is faster.
+  training (`server/data/coral_health_training.csv`). Each row is one day:
+  the four probe averages (temperature, pH, nitrate concentration, PAR) plus
+  yesterday's health index are the inputs, today's health index is the target.
+  The health index has inertia: recovery is slow, decline is faster.
 * `server/model.ipynb` — trains the LightGBM regressor and writes
   `server/model.txt`.
 * `server/model.txt` — the trained model, loaded by both demos.
@@ -136,7 +142,7 @@ Regenerate data / retrain:
   real deployment only the model prediction and the diver measurements would be
   available.
 * The Kalman filter is a deliberately small 1-D filter over the CWCHI state; the
-  five probe parameters are treated as direct measurements rather than filter
+  four probe parameters are treated as direct measurements rather than filter
   states. A full state-space model could be the next step.
 * The hard-write algorithm is kept as the v1 baseline so the two correction
   strategies can be compared side by side.

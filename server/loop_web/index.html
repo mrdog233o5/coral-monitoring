@@ -925,7 +925,7 @@
         </div>
         <div id="sensor-list" class="sensor-list"></div>
         <p class="sensors-note">
-          These five parameters are fresh sensor measurements each loop tick. Only the
+          These four parameters are fresh sensor measurements each loop tick. Only the
           CoralWatch health index is carried as loop state — the correction button does not
           touch the probes.
         </p>
@@ -941,7 +941,7 @@
             probes are actually sampling. In a real deployment you would not see it; it is
             shown here so you can watch the prediction drift and snap back.</li>
           <li><strong>Loop state = CoralWatch health index.</strong> Only CWCHI is carried
-            between ticks. The five probe parameters are measured fresh every tick and are not
+            between ticks. The four probe parameters are measured fresh every tick and are not
             part of the corrected state.</li>
           <li><strong>Two correction algorithms.</strong> The Kalman filter fuses each diver
             measurement with the LightGBM prediction using gain K = P/(P+R): uncertainty P grows
@@ -1063,19 +1063,17 @@
   const POLL_MS = 400;
 
   const SENSORS = [
-    { key: "dissolved_oxygen", label: "Dissolved oxygen", unit: "mg/L" },
+    { key: "temperature", label: "Temperature", unit: "°C" },
     { key: "ph", label: "pH", unit: "" },
-    { key: "temperature", label: "Water temperature", unit: "°C" },
-    { key: "zooxanthellae", label: "Zooxanthellae density", unit: "million cells/cm²" },
-    { key: "nitrate", label: "Nitrate", unit: "µmol/L" },
+    { key: "nitrate", label: "Nitrate concentration", unit: "µmol/L" },
+    { key: "par", label: "PAR", unit: "µmol m⁻² s⁻¹" },
   ];
 
   const SENSOR_SHAPE_GEOMETRY = [
-    { label: "Oxygen" },
-    { label: "pH" },
     { label: "Temperature" },
-    { label: "Zooxanthellae" },
+    { label: "pH" },
     { label: "Nitrate" },
+    { label: "PAR" },
   ];
 
   const ALGORITHM_COPY = {
@@ -1210,7 +1208,7 @@
   }
 
   // ------------------------------------------------------------------ //
-  // Pipeline: build the five sensor parallelograms once
+  // Pipeline: build the four sensor parallelograms once
   // ------------------------------------------------------------------ //
 
   function buildPipelineSensors() {
@@ -1219,23 +1217,23 @@
     app.sensorNodes.clear();
 
     SENSORS.forEach((sensor, index) => {
-      const y = 70 + index * 44;
+      const y = 66 + index * 58;
       const polygon = document.createElementNS(namespace, "polygon");
-      polygon.setAttribute("points", `70,${y} 330,${y} 316,${y + 34} 56,${y + 34}`);
+      polygon.setAttribute("points", `70,${y} 330,${y} 316,${y + 40} 56,${y + 40}`);
       polygon.setAttribute("class", "pipeline-box");
       els.sensorShapes.append(polygon);
 
       const label = document.createElementNS(namespace, "text");
       label.setAttribute("class", "pipeline-sensor");
       label.setAttribute("x", "86");
-      label.setAttribute("y", String(y + 22));
+      label.setAttribute("y", String(y + 25));
       label.textContent = SENSOR_SHAPE_GEOMETRY[index].label;
       els.sensorShapes.append(label);
 
       const reading = document.createElementNS(namespace, "text");
       reading.setAttribute("class", "pipeline-reading");
       reading.setAttribute("x", "304");
-      reading.setAttribute("y", String(y + 22));
+      reading.setAttribute("y", String(y + 25));
       reading.setAttribute("text-anchor", "end");
       reading.textContent = "—";
       els.sensorShapes.append(reading);

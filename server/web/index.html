@@ -443,9 +443,9 @@
         6 = very healthy); the average over a whole transect is a decimal. The index has
         <strong>inertia</strong>: it only moves a limited step per day and recovery is slower
         than decline, so the prediction usually stays close to yesterday's value. The model
-        takes <strong>yesterday's</strong> five sensor averages plus that day's health index and
-        predicts <strong>today's</strong> health index; the sensors mainly nudge the direction
-        and size of the daily change.
+        takes <strong>yesterday's</strong> four sensor averages (temperature, pH, nitrate,
+        PAR) plus that day's health index and predicts <strong>today's</strong> health index;
+        the sensors mainly nudge the direction and size of the daily change.
       </div>
 
       <div id="model-meta" class="model-meta"></div>
@@ -483,55 +483,50 @@
     {
       name: "Healthy reef",
       values: {
-        prev_dissolved_oxygen_mg_l: 8.2,
-        prev_ph: 8.20,
         prev_temperature_c: 25.8,
-        prev_zooxanthellae_million_cells_cm2: 3.5,
-        prev_nitrate_umol_l: 0.3,
+        prev_ph: 8.20,
+        prev_nitrate_umol_l: 0.4,
+        prev_par_umol_m2_s: 300,
         prev_coral_health_index: 5.5,
       },
     },
     {
       name: "Moderate stress",
       values: {
-        prev_dissolved_oxygen_mg_l: 5.8,
-        prev_ph: 7.95,
         prev_temperature_c: 28.6,
-        prev_zooxanthellae_million_cells_cm2: 2.0,
+        prev_ph: 7.95,
         prev_nitrate_umol_l: 3.7,
+        prev_par_umol_m2_s: 500,
         prev_coral_health_index: 3.0,
       },
     },
     {
       name: "Marine heatwave",
       values: {
-        prev_dissolved_oxygen_mg_l: 4.3,
-        prev_ph: 7.78,
         prev_temperature_c: 31.2,
-        prev_zooxanthellae_million_cells_cm2: 1.0,
-        prev_nitrate_umol_l: 6.5,
+        prev_ph: 7.78,
+        prev_nitrate_umol_l: 5.0,
+        prev_par_umol_m2_s: 560,
         prev_coral_health_index: 1.2,
       },
     },
     {
       name: "Nutrient pollution",
       values: {
-        prev_dissolved_oxygen_mg_l: 5.0,
-        prev_ph: 7.85,
         prev_temperature_c: 29.2,
-        prev_zooxanthellae_million_cells_cm2: 1.4,
+        prev_ph: 7.85,
         prev_nitrate_umol_l: 7.4,
+        prev_par_umol_m2_s: 470,
         prev_coral_health_index: 2.0,
       },
     },
     {
       name: "Severe bleaching",
       values: {
-        prev_dissolved_oxygen_mg_l: 3.6,
-        prev_ph: 7.72,
         prev_temperature_c: 31.6,
-        prev_zooxanthellae_million_cells_cm2: 0.5,
-        prev_nitrate_umol_l: 7.0,
+        prev_ph: 7.72,
+        prev_nitrate_umol_l: 6.5,
+        prev_par_umol_m2_s: 640,
         prev_coral_health_index: 0.6,
       },
     },
